@@ -15,7 +15,7 @@
     }
   },
   "bin": {
-    "rmws": "./dist/cli/index.js"
+    "rmws": "dist/cli/index.js"
   },
   "files": [
     "dist",
