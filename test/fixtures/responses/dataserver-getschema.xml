@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetSchemaResponse xmlns="http://www.totvs.com/">
+      <GetSchemaResult><![CDATA[<xs:schema id="GlbUsuarioData" xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="CODUSUARIO" type="xs:string"/></xs:schema>]]></GetSchemaResult>
+    </GetSchemaResponse>
+  </s:Body>
+</s:Envelope>

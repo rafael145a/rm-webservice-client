@@ -1,0 +1,21 @@
+node_modules
+dist
+coverage
+.env
+.env*.local
+*.log
+.DS_Store
+.vscode
+.idea
+
+# Arquivos locais de instrução/planejamento — não vão pro repo
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+plano-*.md
+
+# WSDL/XML capturados localmente para debug (podem conter hostnames/credenciais)
+*.wsdl
+*.local.xml
+scratch/
+tmp/

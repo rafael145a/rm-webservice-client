@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <RealizarConsultaSQLResponse xmlns="http://www.totvs.com/">
+      <RealizarConsultaSQLResult><![CDATA[<NewDataSet>
+  <Resultado>
+    <RA>12345</RA>
+    <NOME>Aluno Exemplo</NOME>
+    <CODCOLIGADA>1</CODCOLIGADA>
+  </Resultado>
+  <Resultado>
+    <RA>54321</RA>
+    <NOME>Outro Aluno</NOME>
+    <CODCOLIGADA>1</CODCOLIGADA>
+  </Resultado>
+</NewDataSet>]]></RealizarConsultaSQLResult>
+    </RealizarConsultaSQLResponse>
+  </s:Body>
+</s:Envelope>

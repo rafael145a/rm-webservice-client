@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <RealizarConsultaSQLResponse xmlns="http://www.totvs.com/">
+      <RealizarConsultaSQLResult><![CDATA[<NewDataSet/>]]></RealizarConsultaSQLResult>
+    </RealizarConsultaSQLResponse>
+  </s:Body>
+</s:Envelope>

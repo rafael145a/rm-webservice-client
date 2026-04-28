@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <ReadViewResponse xmlns="http://www.totvs.com/">
+      <ReadViewResult>&lt;NewDataSet&gt;&lt;xs:schema id="X"/&gt;&lt;GFilial&gt;&lt;CODFILIAL&gt;1&lt;/CODFILIAL&gt;&lt;NOMEFANTASIA&gt;Filial Exemplo&lt;/NOMEFANTASIA&gt;&lt;/GFilial&gt;&lt;/NewDataSet&gt;</ReadViewResult>
+    </ReadViewResponse>
+  </s:Body>
+</s:Envelope>

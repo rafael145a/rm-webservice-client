@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <ReadViewResponse xmlns="http://www.totvs.com/">
+      <ReadViewResult><![CDATA[<NewDataSet>
+  <GUsuario>
+    <CODUSUARIO>mestre</CODUSUARIO>
+    <NOME>Usuário Mestre</NOME>
+    <STATUS>1</STATUS>
+    <EMAIL>usuario@example.com</EMAIL>
+  </GUsuario>
+  <GUsuario>
+    <CODUSUARIO>aluno1</CODUSUARIO>
+    <NOME>Aluno Exemplo</NOME>
+    <STATUS>1</STATUS>
+    <EMAIL>aluno@example.com</EMAIL>
+  </GUsuario>
+</NewDataSet>]]></ReadViewResult>
+    </ReadViewResponse>
+  </s:Body>
+</s:Envelope>
