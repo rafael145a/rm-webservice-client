@@ -1,4 +1,5 @@
 import type { RmAuth } from "../auth/auth-types.js";
+import type { RmLogger } from "../logging/types.js";
 import type { RmContext, RmParameters, Separator } from "../rm/types.js";
 
 export interface RmSoapServiceOptions {
@@ -21,6 +22,8 @@ export interface RmClientOptions {
     contextSeparator?: Separator;
     parameterSeparator?: Separator;
   };
+  logger?: RmLogger;
+  logBody?: boolean;
 }
 
 export type ParseModeArray = "raw" | "records" | "dataset";
@@ -84,8 +87,53 @@ export interface ConsultaSqlClient {
   ): Promise<string>;
 }
 
+export interface DiagnosticStep {
+  name: string;
+  ok: boolean;
+  durationMs: number;
+  details?: Record<string, unknown>;
+  error?: {
+    code: string;
+    message: string;
+    status?: number;
+    faultCode?: string;
+    faultString?: string;
+  };
+}
+
+export interface DiagnosticReport {
+  service: "dataServer" | "consultaSql" | "auth";
+  ok: boolean;
+  steps: DiagnosticStep[];
+}
+
+export interface CheckDataServerOptions {
+  probeDataServerName?: string;
+}
+
+export interface CheckConsultaSqlOptions {
+  probe?: {
+    codSentenca: string;
+    codColigada: number;
+    codSistema: string;
+    parameters?: RmParameters;
+    context?: RmContext;
+  };
+}
+
+export interface AuthenticateOptions {
+  probeDataServerName?: string;
+}
+
+export interface DiagnosticsClient {
+  checkDataServer(options?: CheckDataServerOptions): Promise<DiagnosticReport>;
+  checkConsultaSql(options?: CheckConsultaSqlOptions): Promise<DiagnosticReport>;
+  authenticate(options?: AuthenticateOptions): Promise<DiagnosticReport>;
+}
+
 export interface RmClient {
   dataServer: DataServerClient;
   consultaSql: ConsultaSqlClient;
+  diagnostics: DiagnosticsClient;
   resolveServices(): Promise<void>;
 }

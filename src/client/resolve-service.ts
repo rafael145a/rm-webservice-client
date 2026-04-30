@@ -2,6 +2,7 @@ import { RmConfigError } from "../errors/index.js";
 import { loadWsdl } from "../wsdl/load-wsdl.js";
 import { resolveWsdlService } from "../wsdl/resolve-wsdl-service.js";
 
+import type { RmLogger } from "../logging/types.js";
 import type { ResolvedSoapService } from "../wsdl/wsdl-types.js";
 import type { RmSoapServiceOptions } from "./types.js";
 
@@ -9,6 +10,7 @@ export interface ServiceResolverContext {
   serviceLabel: "dataServer" | "consultaSql";
   expectedPortName: string;
   defaultNamespace: string;
+  logger?: RmLogger;
 }
 
 export function createServiceResolver(
@@ -59,8 +61,9 @@ async function resolveOnce(
   }
 
   const wsdlXml = await loadWsdl({
-    wsdlUrl: options.wsdlUrl,
-    wsdlXml: options.wsdlXml,
+    ...(options.wsdlUrl !== undefined ? { wsdlUrl: options.wsdlUrl } : {}),
+    ...(options.wsdlXml !== undefined ? { wsdlXml: options.wsdlXml } : {}),
+    ...(context.logger ? { logger: context.logger } : {}),
   });
 
   return resolveWsdlService({

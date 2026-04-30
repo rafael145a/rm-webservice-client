@@ -29,6 +29,8 @@ export async function sqlCommand(
     services: { consultaSql: wsdlConfig },
     auth: cfg.auth,
     timeoutMs: cfg.timeoutMs,
+    ...(cfg.logger ? { logger: cfg.logger } : {}),
+    ...(cfg.logBody !== undefined ? { logBody: cfg.logBody } : {}),
   });
 
   const baseOpts = {

@@ -5,6 +5,7 @@ import { serializeContext } from "../rm/serialize-context.js";
 import { callSoapOperation } from "../soap/call-soap-operation.js";
 
 import type { RmAuth } from "../auth/auth-types.js";
+import type { RmLogger } from "../logging/types.js";
 import type { RmContext, Separator } from "../rm/types.js";
 import type { ResolvedSoapService } from "../wsdl/wsdl-types.js";
 import type {
@@ -21,12 +22,22 @@ export interface CreateDataServerClientOptions {
   timeoutMs?: number;
   defaultContext?: RmContext;
   contextSeparator?: Separator;
+  logger?: RmLogger;
+  logBody?: boolean;
 }
 
 export function createDataServerClient(
   options: CreateDataServerClientOptions,
 ): DataServerClient {
-  const { resolveService, auth, timeoutMs, defaultContext, contextSeparator } = options;
+  const {
+    resolveService,
+    auth,
+    timeoutMs,
+    defaultContext,
+    contextSeparator,
+    logger,
+    logBody,
+  } = options;
 
   async function call(operationName: string, body: Record<string, string | undefined>) {
     const svc = await resolveService();
@@ -44,6 +55,8 @@ export function createDataServerClient(
       auth,
       body,
       timeoutMs,
+      ...(logger ? { logger } : {}),
+      ...(logBody !== undefined ? { logBody } : {}),
     });
   }
 

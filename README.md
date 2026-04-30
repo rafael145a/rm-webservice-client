@@ -15,7 +15,9 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 - Basic Auth e Bearer Auth manual
 - `parseMode: "raw"` em todos os métodos para inspeção/escape hatch
 - Hierarquia de erros tipados (HTTP, SOAP Fault, parse, config, timeout)
-- CLI `rmws` para diagnóstico e queries ad-hoc
+- `rm.diagnostics.*` — checagens estruturadas (WSDL, auth, smoke query)
+- Logger opcional com redaction automática de credenciais
+- CLI `rmws` com subcomandos `inspect`, `read-view`, `sql` e `diagnose`
 - Sem dependências SOAP pesadas — apenas `fast-xml-parser` e `cac`
 - Funciona com `fetch` nativo do Node 18+
 
@@ -150,6 +152,43 @@ const alunos = await rm.consultaSql.queryWithContext<Aluno>({
 });
 ```
 
+## Diagnóstico
+
+`rm.diagnostics` faz checagens estruturadas — não lançam erro, devolvem um
+relatório com `ok`, `steps[].durationMs` e `error.code` quando algo falha.
+
+```ts
+const report = await rm.diagnostics.checkDataServer({
+  probeDataServerName: "GlbUsuarioData", // opcional, default "RmWsClient.DiagnosticProbe"
+});
+// {
+//   service: "dataServer",
+//   ok: true,
+//   steps: [
+//     { name: "resolve-wsdl", ok: true, durationMs: 120, details: { ... } },
+//     { name: "is-valid-data-server", ok: true, durationMs: 80, details: { isValid: true } }
+//   ]
+// }
+```
+
+```ts
+// Sem probe: valida só o WSDL.
+await rm.diagnostics.checkConsultaSql();
+
+// Com probe: roda uma sentença real.
+await rm.diagnostics.checkConsultaSql({
+  probe: { codSentenca: "EDU.ALUNOS", codColigada: 1, codSistema: "S" },
+});
+```
+
+```ts
+// authenticate: distingue falha de credencial (HTTP 401/403) de falha de
+// negócio (HTTP 500, SOAP Fault). Auth é considerado OK em qualquer
+// cenário onde a request passou pela camada de autenticação.
+const auth = await rm.diagnostics.authenticate();
+if (!auth.ok) console.error(auth.steps[0]?.error);
+```
+
 ## Contexto e parâmetros
 
 Aceitam string crua ou objeto. Objeto vira `K=V;K=V` por padrão.
@@ -194,6 +233,51 @@ import {
 
 Todas as classes têm `code` para discriminar via `error.code === "RM_HTTP_ERROR"`.
 
+## Logging
+
+Por padrão a lib não loga nada. Passe um `logger` para ter eventos
+estruturados de cada request SOAP e download de WSDL.
+
+```ts
+import { createRmClient, createConsoleLogger } from "rm-webservice-client";
+
+const rm = createRmClient({
+  services: { dataServer: { wsdlUrl: process.env.RM_DATASERVER_WSDL! } },
+  auth: { type: "basic", username: "u", password: "p" },
+  logger: createConsoleLogger({ level: "debug" }), // escreve JSON em stderr
+  logBody: true, // opcional — inclui o envelope SOAP redigido
+});
+```
+
+Eventos emitidos:
+
+| Evento          | Nível   | Quando                          |
+|-----------------|---------|----------------------------------|
+| `wsdl.request`  | `debug` | Antes do `fetch` do WSDL         |
+| `wsdl.response` | `debug` | Após receber o WSDL              |
+| `wsdl.error`    | `error` | Falha ao baixar WSDL             |
+| `soap.request`  | `debug` | Antes de enviar o envelope SOAP  |
+| `soap.response` | `debug` | Após receber a resposta          |
+| `soap.error`    | `error` | HTTP, SOAP Fault ou timeout      |
+
+`Authorization`, `Cookie` e similares são automaticamente substituídos por
+`[REDACTED]` nos headers logados. Quando `logBody: true`, o body passa por
+um redactor que converte `password=...`, `senha=...`, `token=...`,
+`access_token=...`, `bearer=...`, `api_key=...` em `[REDACTED]`.
+
+Logger custom — qualquer objeto que satisfaça `RmLogger`:
+
+```ts
+import type { RmLogger } from "rm-webservice-client";
+
+const logger: RmLogger = {
+  debug: (event, data) => myObservability.track(event, data),
+  info:  (event, data) => myObservability.track(event, data),
+  warn:  (event, data) => myObservability.track(event, data),
+  error: (event, data) => myObservability.track(event, data),
+};
+```
+
 ## Override manual (sem WSDL)
 
 Em ambientes onde o `?wsdl` está bloqueado mas o endpoint funciona:
@@ -230,18 +314,41 @@ npx rmws read-view GlbUsuarioData \
 npx rmws sql EDU.ALUNOS.ATIVOS \
   --coligada 1 --sistema S \
   --params "CODFILIAL=1"
+
+npx rmws diagnose                          # roda dataServer + ConsultaSQL + auth
+npx rmws diagnose dataserver               # só dataServer
+npx rmws diagnose auth                     # só verificação de auth
+npx rmws diagnose sql \
+  --probe-codsentenca EDU.ALUNOS \
+  --probe-coligada 1 --probe-sistema S \
+  --probe-params "CODFILIAL=1"             # smoke real do ConsultaSQL
 ```
 
 Flags globais:
 
-| Flag                     | Descrição                                          |
-|--------------------------|----------------------------------------------------|
-| `--wsdl <url\|path>`     | URL ou caminho do WSDL (override env)              |
-| `--user`, `--password`   | Basic Auth                                         |
-| `--bearer <token>`       | Bearer Auth                                        |
-| `--timeout <ms>`         | Timeout (default 30s)                              |
-| `--raw`                  | Retorna XML cru                                    |
-| `--quiet`                | Suprime mensagens em stderr                        |
+| Flag                     | Descrição                                                      |
+|--------------------------|----------------------------------------------------------------|
+| `--wsdl <url\|path>`     | URL ou caminho do WSDL (override env)                          |
+| `--user`, `--password`   | Basic Auth                                                     |
+| `--bearer <token>`       | Bearer Auth                                                    |
+| `--timeout <ms>`         | Timeout (default 30s)                                          |
+| `--raw`                  | Retorna XML cru                                                |
+| `--quiet`                | Suprime mensagens em stderr                                    |
+| `--log-level <level>`    | Liga logs estruturados em stderr (`debug \| info \| warn \| error`) |
+| `--log-body`             | Inclui body SOAP redigido nos logs (use com `--log-level debug`) |
+
+Flags do `diagnose`:
+
+| Flag                          | Descrição                                                   |
+|-------------------------------|-------------------------------------------------------------|
+| `--wsdl-dataserver <url>`     | WSDL do dataServer (override env)                           |
+| `--wsdl-sql <url>`            | WSDL do ConsultaSQL (override env)                          |
+| `--probe-dataserver <name>`   | DataServer usado em `IsValidDataServer`                     |
+| `--probe-codsentenca <name>`  | Sentença para smoke do ConsultaSQL                          |
+| `--probe-coligada <n>`        | Coligada do probe ConsultaSQL                               |
+| `--probe-sistema <s>`         | Sistema do probe ConsultaSQL                                |
+| `--probe-params <p>`          | Parâmetros do probe ConsultaSQL                             |
+| `--probe-context <ctx>`       | Contexto (usa `queryWithContext` quando presente)           |
 
 Códigos de saída:
 
@@ -264,6 +371,7 @@ RM_USER=mestre
 RM_PASSWORD=...
 RM_BEARER_TOKEN=...
 RM_TIMEOUT_MS=30000
+RM_LOG_LEVEL=debug
 ```
 
 > **WSDL em WCF (TOTVS RM Cloud)**: o WSDL é servido no endpoint MEX
@@ -273,7 +381,9 @@ RM_TIMEOUT_MS=30000
 
 ## Segurança
 
-- Não logue `Authorization`, senha, ou XML completo de produção
+- Use o `logger` da lib em vez de `console.log` no envelope SOAP — ele
+  redige `Authorization`, cookies e padrões `password=`/`senha=`/`token=`
+  automaticamente
 - WSDLs e XMLs commitados em testes devem ser sanitizados
   (substitua hostnames reais por `rm.example.com`)
 - Bearer tokens estáticos vencem — prefira `getToken: async () => ...`

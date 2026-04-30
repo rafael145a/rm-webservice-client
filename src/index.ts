@@ -1,11 +1,17 @@
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 export { createRmClient } from "./client/create-rm-client.js";
 export type {
+  AuthenticateOptions,
+  CheckConsultaSqlOptions,
+  CheckDataServerOptions,
   ConsultaSqlClient,
   ConsultaSqlOptions,
   ConsultaSqlWithContextOptions,
   DataServerClient,
+  DiagnosticReport,
+  DiagnosticStep,
+  DiagnosticsClient,
   GetSchemaOptions,
   IsValidDataServerOptions,
   ParseModeArray,
@@ -31,3 +37,16 @@ export {
   RmParseError,
   RmTimeoutError,
 } from "./errors/index.js";
+
+export {
+  NOOP_LOGGER,
+  createConsoleLogger,
+  redactHeaders,
+  redactString,
+} from "./logging/index.js";
+export type {
+  ConsoleLoggerOptions,
+  LogLevel,
+  LogPayload,
+  RmLogger,
+} from "./logging/index.js";

@@ -23,3 +23,20 @@ export function exitCodeFor(err: unknown): number {
   if (err instanceof RmTimeoutError) return EXIT_CODES.TIMEOUT;
   return EXIT_CODES.UNKNOWN;
 }
+
+export function exitCodeForCode(code: string): number {
+  switch (code) {
+    case "RM_CONFIG_ERROR":
+      return EXIT_CODES.CONFIG;
+    case "RM_HTTP_ERROR":
+      return EXIT_CODES.HTTP;
+    case "RM_SOAP_FAULT":
+      return EXIT_CODES.SOAP_FAULT;
+    case "RM_PARSE_ERROR":
+      return EXIT_CODES.PARSE;
+    case "RM_TIMEOUT":
+      return EXIT_CODES.TIMEOUT;
+    default:
+      return EXIT_CODES.UNKNOWN;
+  }
+}

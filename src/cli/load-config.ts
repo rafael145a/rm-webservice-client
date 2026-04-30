@@ -1,6 +1,8 @@
 import { RmConfigError } from "../errors/rm-config-error.js";
+import { createConsoleLogger } from "../logging/console-logger.js";
 
 import type { RmAuth } from "../auth/auth-types.js";
+import type { LogLevel, RmLogger } from "../logging/types.js";
 
 export interface CliGlobalFlags {
   wsdl?: string;
@@ -10,6 +12,8 @@ export interface CliGlobalFlags {
   timeout?: number | string;
   raw?: boolean;
   quiet?: boolean;
+  logLevel?: string;
+  logBody?: boolean;
 }
 
 export interface ResolvedCliConfig {
@@ -18,6 +22,8 @@ export interface ResolvedCliConfig {
   timeoutMs?: number;
   raw: boolean;
   quiet: boolean;
+  logger?: RmLogger;
+  logBody?: boolean;
 }
 
 export type ServiceLabel = "dataServer" | "consultaSql";
@@ -26,6 +32,8 @@ const ENV_WSDL: Record<ServiceLabel, string> = {
   dataServer: "RM_DATASERVER_WSDL",
   consultaSql: "RM_CONSULTASQL_WSDL",
 };
+
+const VALID_LEVELS: ReadonlyArray<LogLevel> = ["debug", "info", "warn", "error"];
 
 export function resolveCliConfig(
   flags: CliGlobalFlags,
@@ -55,6 +63,7 @@ export function resolveCliConfig(
   }
 
   const timeoutMs = parseTimeout(flags.timeout ?? env.RM_TIMEOUT_MS);
+  const logger = buildLoggerFromFlags(flags, env);
 
   return {
     wsdlUrl,
@@ -62,7 +71,24 @@ export function resolveCliConfig(
     timeoutMs,
     raw: Boolean(flags.raw),
     quiet: Boolean(flags.quiet),
+    ...(logger ? { logger } : {}),
+    ...(flags.logBody ? { logBody: true } : {}),
   };
+}
+
+export function buildLoggerFromFlags(
+  flags: CliGlobalFlags,
+  env: NodeJS.ProcessEnv = process.env,
+): RmLogger | undefined {
+  const raw = flags.logLevel ?? env.RM_LOG_LEVEL;
+  if (!raw) return undefined;
+  const level = raw.toLowerCase() as LogLevel;
+  if (!VALID_LEVELS.includes(level)) {
+    throw new RmConfigError(
+      `--log-level inválido: "${raw}". Use ${VALID_LEVELS.join(", ")}.`,
+    );
+  }
+  return createConsoleLogger({ level });
 }
 
 function parseTimeout(value: number | string | undefined): number | undefined {

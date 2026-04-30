@@ -6,6 +6,7 @@ import { serializeParameters } from "../rm/serialize-parameters.js";
 import { callSoapOperation } from "../soap/call-soap-operation.js";
 
 import type { RmAuth } from "../auth/auth-types.js";
+import type { RmLogger } from "../logging/types.js";
 import type { RmContext, Separator } from "../rm/types.js";
 import type { ResolvedSoapService } from "../wsdl/wsdl-types.js";
 import type {
@@ -21,6 +22,8 @@ export interface CreateConsultaSqlClientOptions {
   defaultContext?: RmContext;
   contextSeparator?: Separator;
   parameterSeparator?: Separator;
+  logger?: RmLogger;
+  logBody?: boolean;
 }
 
 export function createConsultaSqlClient(
@@ -33,6 +36,8 @@ export function createConsultaSqlClient(
     defaultContext,
     contextSeparator,
     parameterSeparator,
+    logger,
+    logBody,
   } = options;
 
   async function call(operationName: string, body: Record<string, string | number | undefined>) {
@@ -51,6 +56,8 @@ export function createConsultaSqlClient(
       auth,
       body,
       timeoutMs,
+      ...(logger ? { logger } : {}),
+      ...(logBody !== undefined ? { logBody } : {}),
     });
   }
 

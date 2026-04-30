@@ -2,6 +2,7 @@ import { cac } from "cac";
 
 import { VERSION } from "../index.js";
 
+import { diagnoseCommand, type DiagnoseFlags } from "./commands/diagnose.js";
 import { inspectCommand } from "./commands/inspect.js";
 import { readViewCommand, type ReadViewFlags } from "./commands/read-view.js";
 import { sqlCommand, type SqlFlags } from "./commands/sql.js";
@@ -18,6 +19,8 @@ cli.option("--bearer <token>", "Bearer token");
 cli.option("--timeout <ms>", "Timeout em milissegundos");
 cli.option("--raw", "Retorna XML cru em vez de JSON");
 cli.option("--quiet", "Suprime mensagens diagnósticas em stderr");
+cli.option("--log-level <level>", "Nível de log em stderr (debug | info | warn | error)");
+cli.option("--log-body", "Inclui body SOAP redigido nos logs (requer --log-level debug)");
 
 cli
   .command("inspect <service>", "Inspeciona WSDL (service: dataserver | sql)")
@@ -44,6 +47,22 @@ cli
   .action(async (codSentenca: string, flags: SqlFlags) => {
     const out = await sqlCommand(codSentenca, flags);
     process.stdout.write(out + "\n");
+  });
+
+cli
+  .command("diagnose [target]", "Diagnóstico (target: dataserver | sql | auth | all)")
+  .option("--wsdl-dataserver <url>", "WSDL do dataServer (override env)")
+  .option("--wsdl-sql <url>", "WSDL do ConsultaSQL (override env)")
+  .option("--probe-dataserver <name>", "DataServer a ser usado em IsValidDataServer")
+  .option("--probe-codsentenca <name>", "Sentença para smoke do ConsultaSQL")
+  .option("--probe-coligada <n>", "Coligada do probe ConsultaSQL")
+  .option("--probe-sistema <s>", "Sistema do probe ConsultaSQL")
+  .option("--probe-params <p>", "Parâmetros do probe ConsultaSQL")
+  .option("--probe-context <ctx>", "Contexto do probe ConsultaSQL")
+  .action(async (target: string | undefined, flags: DiagnoseFlags) => {
+    const { stdout, exitCode } = await diagnoseCommand(target, flags);
+    process.stdout.write(stdout + "\n");
+    if (exitCode !== 0) process.exit(exitCode);
   });
 
 cli.help();

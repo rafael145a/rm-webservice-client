@@ -20,6 +20,8 @@ export async function readViewCommand(
     services: { dataServer: wsdlConfig },
     auth: cfg.auth,
     timeoutMs: cfg.timeoutMs,
+    ...(cfg.logger ? { logger: cfg.logger } : {}),
+    ...(cfg.logBody !== undefined ? { logBody: cfg.logBody } : {}),
   });
 
   if (cfg.raw) {
