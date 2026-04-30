@@ -19,3 +19,6 @@ plano-*.md
 *.local.xml
 scratch/
 tmp/
+
+# Exceção: fixtures sanitizados (rm.example.com, sem credenciais) precisam ir pro repo
+!test/fixtures/wsdl/*.wsdl
