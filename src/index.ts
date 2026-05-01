@@ -1,4 +1,4 @@
-export const VERSION = "0.3.1";
+export const VERSION = "0.4.0";
 
 export { createRmClient } from "./client/create-rm-client.js";
 export type {
@@ -40,8 +40,15 @@ export {
   RmHttpError,
   RmSoapFaultError,
   RmParseError,
+  RmResultError,
   RmTimeoutError,
 } from "./errors/index.js";
+
+export {
+  assertRmResultOk,
+  detectRmResultError,
+} from "./rm/detect-result-error.js";
+export type { DetectResultErrorMatch } from "./rm/detect-result-error.js";
 
 export {
   NOOP_LOGGER,

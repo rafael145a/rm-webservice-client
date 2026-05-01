@@ -1,4 +1,5 @@
 import { RmConfigError, RmParseError } from "../errors/index.js";
+import { assertRmResultOk } from "../rm/detect-result-error.js";
 import { extractResultXml } from "../rm/extract-result-xml.js";
 import { parseRmDataset } from "../rm/parse-rm-dataset.js";
 import { serializeContext } from "../rm/serialize-context.js";
@@ -10,8 +11,11 @@ import type { RmContext, Separator } from "../rm/types.js";
 import type { ResolvedSoapService } from "../wsdl/wsdl-types.js";
 import type {
   DataServerClient,
+  DeleteRecordByKeyOptions,
+  DeleteRecordOptions,
   GetSchemaOptions,
   IsValidDataServerOptions,
+  ReadLookupViewOptions,
   ReadRecordOptions,
   ReadViewOptions,
   SaveRecordOptions,
@@ -135,11 +139,78 @@ export function createDataServerClient(
 
       if (opts.parseMode === "raw") return xml;
 
-      return extractResultXml({
+      const result = extractResultXml({
         soapXml: xml,
         resultElementName: "SaveRecordResult",
         operationName: "SaveRecord",
       });
+
+      if (opts.parseMode === "result-strict") {
+        return assertRmResultOk("SaveRecord", result);
+      }
+      return result;
+    },
+
+    async deleteRecord(opts: DeleteRecordOptions): Promise<string> {
+      const xml = await call("DeleteRecord", {
+        DataServerName: opts.dataServerName,
+        XML: opts.xml,
+        Contexto: effectiveContext(opts.context),
+      });
+
+      if (opts.parseMode === "raw") return xml;
+
+      const result = extractResultXml({
+        soapXml: xml,
+        resultElementName: "DeleteRecordResult",
+        operationName: "DeleteRecord",
+      });
+      if (opts.parseMode === "result-strict") {
+        return assertRmResultOk("DeleteRecord", result);
+      }
+      return result;
+    },
+
+    async deleteRecordByKey(opts: DeleteRecordByKeyOptions): Promise<string> {
+      const xml = await call("DeleteRecordByKey", {
+        DataServerName: opts.dataServerName,
+        PrimaryKey: serializePrimaryKey(opts.primaryKey),
+        Contexto: effectiveContext(opts.context),
+      });
+
+      if (opts.parseMode === "raw") return xml;
+
+      const result = extractResultXml({
+        soapXml: xml,
+        resultElementName: "DeleteRecordByKeyResult",
+        operationName: "DeleteRecordByKey",
+      });
+      if (opts.parseMode === "result-strict") {
+        return assertRmResultOk("DeleteRecordByKey", result);
+      }
+      return result;
+    },
+
+    async readLookupView<T = unknown>(
+      opts: ReadLookupViewOptions,
+    ): Promise<T[] | string> {
+      const xml = await call("ReadLookupView", {
+        DataServerName: opts.dataServerName,
+        Filtro: opts.filter,
+        Contexto: effectiveContext(opts.context),
+        OwnerData: opts.ownerData,
+      });
+
+      if (opts.parseMode === "raw") return xml;
+
+      const inner = extractResultXml({
+        soapXml: xml,
+        resultElementName: "ReadLookupViewResult",
+        operationName: "ReadLookupView",
+      });
+
+      if (opts.parseMode === "dataset") return inner as unknown as T[];
+      return parseRmDataset<T>({ innerXml: inner, operationName: "ReadLookupView" });
     },
 
     async isValidDataServer(opts: IsValidDataServerOptions): Promise<boolean> {

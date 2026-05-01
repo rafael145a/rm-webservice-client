@@ -3,8 +3,20 @@ import { cac } from "cac";
 import { VERSION } from "../index.js";
 
 import { catalogCommand, type CatalogFlags } from "./commands/catalog.js";
+import {
+  deleteRecordByKeyCommand,
+  type DeleteRecordByKeyFlags,
+} from "./commands/delete-record-by-key.js";
+import {
+  deleteRecordCommand,
+  type DeleteRecordFlags,
+} from "./commands/delete-record.js";
 import { diagnoseCommand, type DiagnoseFlags } from "./commands/diagnose.js";
 import { inspectCommand } from "./commands/inspect.js";
+import {
+  readLookupViewCommand,
+  type ReadLookupViewFlags,
+} from "./commands/read-lookup-view.js";
 import { readViewCommand, type ReadViewFlags } from "./commands/read-view.js";
 import { saveRecordCommand, type SaveRecordFlags } from "./commands/save-record.js";
 import { sqlCommand, type SqlFlags } from "./commands/sql.js";
@@ -62,6 +74,64 @@ cli
   .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
   .action(async (dataServerName: string, flags: SaveRecordFlags) => {
     const out = await saveRecordCommand(dataServerName, flags);
+    process.stdout.write(out + "\n");
+  });
+
+cli
+  .command(
+    "delete-record <dataServerName>",
+    "DataServer DeleteRecord (EXPERIMENTAL — escrita destrutiva)",
+  )
+  .option("--xml <content>", "XML do dataset (NewDataSet/Row) inline")
+  .option("--xml-file <path>", "Caminho para arquivo com XML do dataset")
+  .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
+  .option(
+    "--strict",
+    "Detecta erro embutido no Result e lança RmResultError (exit 6)",
+  )
+  .action(async (dataServerName: string, flags: DeleteRecordFlags) => {
+    const out = await deleteRecordCommand(dataServerName, flags);
+    process.stdout.write(out + "\n");
+  });
+
+cli
+  .command(
+    "delete-record-by-key <dataServerName> <primaryKey>",
+    "DataServer DeleteRecordByKey (EXPERIMENTAL — escrita destrutiva)",
+  )
+  .option(
+    "--context <ctx>",
+    "Contexto (string ou K=V;K=V). Chave composta: vírgula (ex.: '1,abc')",
+  )
+  .option(
+    "--strict",
+    "Detecta erro embutido no Result e lança RmResultError (exit 6)",
+  )
+  .action(
+    async (
+      dataServerName: string,
+      primaryKey: string,
+      flags: DeleteRecordByKeyFlags,
+    ) => {
+      const out = await deleteRecordByKeyCommand(
+        dataServerName,
+        primaryKey,
+        flags,
+      );
+      process.stdout.write(out + "\n");
+    },
+  );
+
+cli
+  .command(
+    "read-lookup-view <dataServerName>",
+    "DataServer ReadLookupView (lookup/dropdown — leitura)",
+  )
+  .option("--filter <expr>", "Filtro RM")
+  .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
+  .option("--owner-data <data>", "OwnerData (string/XML específico do DataServer)")
+  .action(async (dataServerName: string, flags: ReadLookupViewFlags) => {
+    const out = await readLookupViewCommand(dataServerName, flags);
     process.stdout.write(out + "\n");
   });
 

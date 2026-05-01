@@ -70,13 +70,51 @@ export interface IsValidDataServerOptions {
   context?: RmContext;
 }
 
-export type ParseModeSaveRecord = "raw" | "result";
+/**
+ * - `raw`: retorna o SOAP envelope completo.
+ * - `result` (default): retorna o conteúdo do `<...Result>` cru — string
+ *   pode ser PK gerado, vazio ou texto de erro embutido pelo RM.
+ * - `result-strict`: aplica `detectRmResultError` e lança `RmResultError`
+ *   quando o RM rejeita a operação por regra de negócio (FK, campo
+ *   obrigatório, validação custom). PK gerado / Result vazio passam
+ *   intactos como string.
+ */
+export type ParseModeSaveRecord = "raw" | "result" | "result-strict";
 
 export interface SaveRecordOptions {
   dataServerName: DataServerNameInput;
   xml: string;
   context?: RmContext;
   parseMode?: ParseModeSaveRecord;
+}
+
+export interface DeleteRecordOptions {
+  dataServerName: DataServerNameInput;
+  /** Dataset XML (NewDataSet/Row) com as linhas a deletar — mesmo formato do `saveRecord`. */
+  xml: string;
+  context?: RmContext;
+  parseMode?: ParseModeSaveRecord;
+}
+
+export interface DeleteRecordByKeyOptions {
+  dataServerName: DataServerNameInput;
+  /** Chave primária (string, número ou array para chave composta — concatenado por `;`). */
+  primaryKey: string | number | Array<string | number>;
+  context?: RmContext;
+  parseMode?: ParseModeSaveRecord;
+}
+
+export interface ReadLookupViewOptions {
+  dataServerName: DataServerNameInput;
+  filter?: string;
+  context?: RmContext;
+  /**
+   * String/XML específico do DataServer que muda o comportamento do
+   * lookup. Usado por DataServers que dependem de outro registro/contexto
+   * (ex.: lookups baseados em coligada/sistema). Default: omitido.
+   */
+  ownerData?: string;
+  parseMode?: ParseModeArray;
 }
 
 export interface DataServerClient {
@@ -91,6 +129,15 @@ export interface DataServerClient {
   isValidDataServer(options: IsValidDataServerOptions): Promise<boolean>;
 
   saveRecord(options: SaveRecordOptions): Promise<string>;
+
+  deleteRecord(options: DeleteRecordOptions): Promise<string>;
+
+  deleteRecordByKey(options: DeleteRecordByKeyOptions): Promise<string>;
+
+  readLookupView<T = unknown>(options: ReadLookupViewOptions): Promise<T[]>;
+  readLookupView(
+    options: ReadLookupViewOptions & { parseMode: "raw" },
+  ): Promise<string>;
 }
 
 export interface ConsultaSqlOptions {

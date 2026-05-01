@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <ReadLookupViewResponse xmlns="http://www.totvs.com/">
+      <ReadLookupViewResult><![CDATA[<NewDataSet>
+  <Lookup>
+    <CHAVE>1</CHAVE>
+    <DESCRICAO>Opção A</DESCRICAO>
+  </Lookup>
+  <Lookup>
+    <CHAVE>2</CHAVE>
+    <DESCRICAO>Opção B</DESCRICAO>
+  </Lookup>
+</NewDataSet>]]></ReadLookupViewResult>
+    </ReadLookupViewResponse>
+  </s:Body>
+</s:Envelope>

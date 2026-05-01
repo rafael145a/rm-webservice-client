@@ -459,6 +459,58 @@ describe("DataServerClient.saveRecord", () => {
     ).rejects.toMatchObject({ code: "RM_SOAP_FAULT" });
   });
 
+  it("parseMode result-strict: PK válido passa intocado", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-saverecord.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+      parseMode: "result-strict",
+    });
+    expect(result).toBe("1;mestre");
+  });
+
+  it("parseMode result-strict: erro embutido vira RmResultError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-saverecord-fk-error.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.saveRecord({
+        dataServerName: "EduPessoaData",
+        xml: datasetXml,
+        parseMode: "result-strict",
+      }),
+    ).rejects.toMatchObject({
+      code: "RM_RESULT_ERROR",
+      operationName: "SaveRecord",
+      summary: expect.stringMatching(/Violação de chave/),
+      sql: expect.stringMatching(/INSERT INTO \[SPESSOA\]/),
+    });
+  });
+
+  it("parseMode result (default) devolve erro embutido cru sem lançar", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-saverecord-fk-error.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.saveRecord({
+      dataServerName: "EduPessoaData",
+      xml: datasetXml,
+    });
+    expect(typeof result).toBe("string");
+    expect(result).toContain("Violação de chave");
+  });
+
   it("não loga o XML do payload por padrão (logBody=false implícito)", async () => {
     const debug = vi.fn();
     const logger = {
@@ -481,6 +533,301 @@ describe("DataServerClient.saveRecord", () => {
     const calls = debug.mock.calls.map((c) => JSON.stringify(c));
     expect(calls.join("\n")).not.toContain(datasetXml);
     expect(calls.join("\n")).not.toContain("&lt;NewDataSet&gt;");
+  });
+});
+
+describe("DataServerClient.deleteRecordByKey", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("retorna string vazia em sucesso (Result vazio do RM)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-deleterecord-bykey.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.deleteRecordByKey({
+      dataServerName: "RhuPessoaData",
+      primaryKey: 26620,
+    });
+    expect(result).toBe("");
+  });
+
+  it("envia DataServerName, PrimaryKey e Contexto + SOAPAction correto", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-deleterecord-bykey.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    await rm.dataServer.deleteRecordByKey({
+      dataServerName: "RhuPessoaData",
+      primaryKey: [1, "abc"],
+      context: "CODCOLIGADA=1;CODSISTEMA=G",
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = init.body as string;
+    expect(body).toContain("<tot:DataServerName>RhuPessoaData</tot:DataServerName>");
+    expect(body).toContain("<tot:PrimaryKey>1;abc</tot:PrimaryKey>");
+    expect(body).toContain("<tot:Contexto>CODCOLIGADA=1;CODSISTEMA=G</tot:Contexto>");
+
+    const headers = init.headers as Record<string, string>;
+    expect(headers.SOAPAction).toBe(
+      '"http://www.totvs.com/IwsDataServer/DeleteRecordByKey"',
+    );
+  });
+
+  it("parseMode raw devolve SOAP envelope cru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-deleterecord-bykey.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.deleteRecordByKey({
+      dataServerName: "RhuPessoaData",
+      primaryKey: "26620",
+      parseMode: "raw",
+    });
+    expect(result).toContain("<DeleteRecordByKeyResponse");
+  });
+
+  it("parseMode result-strict: vazio passa, erro vira RmResultError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(fixture("dataserver-deleterecord-bykey.xml")))
+        .mockResolvedValueOnce(new Response(fixture("dataserver-deleterecord-fk-error.xml").replace(/DeleteRecordResponse/g, "DeleteRecordByKeyResponse").replace(/DeleteRecordResult/g, "DeleteRecordByKeyResult"))),
+    );
+    const rm = createRmClient(baseConfig);
+
+    // 1ª: vazio passa
+    const ok = await rm.dataServer.deleteRecordByKey({
+      dataServerName: "RhuPessoaData",
+      primaryKey: "26620",
+      parseMode: "result-strict",
+    });
+    expect(ok).toBe("");
+
+    // 2ª: FK erro lança
+    await expect(
+      rm.dataServer.deleteRecordByKey({
+        dataServerName: "RhuPessoaData",
+        primaryKey: "26620",
+        parseMode: "result-strict",
+      }),
+    ).rejects.toMatchObject({
+      code: "RM_RESULT_ERROR",
+      operationName: "DeleteRecordByKey",
+    });
+  });
+
+  it("aplica defaults.context quando opts.context é omitido", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-deleterecord-bykey.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient({
+      ...baseConfig,
+      defaults: {
+        context: { CODCOLIGADA: 1, CODSISTEMA: "G", CODUSUARIO: "mestre" },
+      },
+    });
+    await rm.dataServer.deleteRecordByKey({
+      dataServerName: "RhuPessoaData",
+      primaryKey: 26620,
+    });
+    const body = (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string;
+    expect(body).toContain("CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre");
+  });
+});
+
+describe("DataServerClient.deleteRecord", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  const datasetXml =
+    "<NewDataSet><PPessoa><CODIGO>26620</CODIGO></PPessoa></NewDataSet>";
+
+  it("retorna string vazia em sucesso", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-deleterecord.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.deleteRecord({
+      dataServerName: "RhuPessoaData",
+      xml: datasetXml,
+    });
+    expect(result).toBe("");
+  });
+
+  it("envia XML escapado + SOAPAction de DeleteRecord", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-deleterecord.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    await rm.dataServer.deleteRecord({
+      dataServerName: "RhuPessoaData",
+      xml: datasetXml,
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = init.body as string;
+    expect(body).toContain(
+      "<tot:XML>&lt;NewDataSet&gt;&lt;PPessoa&gt;",
+    );
+    const headers = init.headers as Record<string, string>;
+    expect(headers.SOAPAction).toBe(
+      '"http://www.totvs.com/IwsDataServer/DeleteRecord"',
+    );
+  });
+
+  it("parseMode result-strict lança em FK violation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-deleterecord-fk-error.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.deleteRecord({
+        dataServerName: "RhuPessoaData",
+        xml: datasetXml,
+        parseMode: "result-strict",
+      }),
+    ).rejects.toMatchObject({
+      code: "RM_RESULT_ERROR",
+      operationName: "DeleteRecord",
+      summary: expect.stringMatching(/Violação/),
+    });
+  });
+
+  it("parseMode raw devolve SOAP cru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-deleterecord.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.deleteRecord({
+      dataServerName: "RhuPessoaData",
+      xml: datasetXml,
+      parseMode: "raw",
+    });
+    expect(result).toContain("<DeleteRecordResponse");
+  });
+
+  it("não loga o XML do payload por padrão", async () => {
+    const debug = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-deleterecord.xml"))),
+    );
+    const rm = createRmClient({
+      ...baseConfig,
+      logger: { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    });
+    await rm.dataServer.deleteRecord({
+      dataServerName: "RhuPessoaData",
+      xml: datasetXml,
+    });
+    const calls = JSON.stringify(debug.mock.calls);
+    expect(calls).not.toContain(datasetXml);
+    expect(calls).not.toContain("&lt;NewDataSet&gt;");
+  });
+});
+
+describe("DataServerClient.readLookupView", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("retorna array tipado", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-readlookupview.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const items = await rm.dataServer.readLookupView<{
+      CHAVE: string;
+      DESCRICAO: string;
+    }>({ dataServerName: "AlgumLookupData" });
+    expect(items).toHaveLength(2);
+    expect(items[0]?.CHAVE).toBe("1");
+    expect(items[0]?.DESCRICAO).toBe("Opção A");
+  });
+
+  it("envia DataServerName, Filtro, Contexto, OwnerData + SOAPAction", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-readlookupview.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    await rm.dataServer.readLookupView({
+      dataServerName: "AlgumLookupData",
+      filter: "X=1",
+      context: "CODCOLIGADA=1",
+      ownerData: "<Owner><X>1</X></Owner>",
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = init.body as string;
+    expect(body).toContain("<tot:DataServerName>AlgumLookupData</tot:DataServerName>");
+    expect(body).toContain("<tot:Filtro>X=1</tot:Filtro>");
+    expect(body).toContain("<tot:Contexto>CODCOLIGADA=1</tot:Contexto>");
+    expect(body).toContain(
+      "<tot:OwnerData>&lt;Owner&gt;&lt;X&gt;1&lt;/X&gt;&lt;/Owner&gt;</tot:OwnerData>",
+    );
+
+    const headers = init.headers as Record<string, string>;
+    expect(headers.SOAPAction).toBe(
+      '"http://www.totvs.com/IwsDataServer/ReadLookupView"',
+    );
+  });
+
+  it("ownerData omitido NÃO emite o elemento", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-readlookupview.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+    const rm = createRmClient(baseConfig);
+    await rm.dataServer.readLookupView({ dataServerName: "X" });
+    const body = (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string;
+    expect(body).not.toContain("<tot:OwnerData");
+  });
+
+  it("parseMode raw retorna SOAP envelope cru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-readlookupview.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.readLookupView({
+      dataServerName: "X",
+      parseMode: "raw",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("ReadLookupViewResult");
+  });
+
+  it("parseMode dataset retorna XML interno (sem parsing)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-readlookupview.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.readLookupView({
+      dataServerName: "X",
+      parseMode: "dataset",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("<NewDataSet>");
   });
 });
 

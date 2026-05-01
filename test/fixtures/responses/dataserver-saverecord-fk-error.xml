@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <SaveRecordResponse xmlns="http://www.totvs.com/">
+      <SaveRecordResult>Violação de chave estrangeira&#xD;
+&#xD;
+Possíveis causas:&#xD;
+  - exclusão de registro que possui outros registros associados&#xD;
+=======================================&#xD;
+   at RM.Lib.Data.DbServices.QueryUpdate(DataSet dataSet, String tableName)&#xD;
+   at RM.Edu.Cadastros.EduPessoaData.DoSaveRecord(DataSet dataSet, Int32&amp; rowsAffected, Object ownerData)&#xD;
+=======================================&#xD;
+The INSERT statement conflicted with the FOREIGN KEY constraint "FKSPESSOA_PPESSOA". The conflict occurred in database "CTF45V_135936_RM_DV", table "dbo.PPESSOA", column 'CODIGO'.&#xD;
+=======================================&#xD;
+INSERT INTO [SPESSOA] ([CODIGO]) VALUES (-1)&#xD;
+=======================================&#xD;</SaveRecordResult>
+    </SaveRecordResponse>
+  </s:Body>
+</s:Envelope>

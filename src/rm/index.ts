@@ -5,3 +5,8 @@ export type { ExtractResultXmlOptions } from "./extract-result-xml.js";
 export { parseRmDataset } from "./parse-rm-dataset.js";
 export type { ParseRmDatasetOptions } from "./parse-rm-dataset.js";
 export type { RmContext, RmParameters, RmPrimitive, Separator } from "./types.js";
+export {
+  assertRmResultOk,
+  detectRmResultError,
+} from "./detect-result-error.js";
+export type { DetectResultErrorMatch } from "./detect-result-error.js";

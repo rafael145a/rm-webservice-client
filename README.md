@@ -10,15 +10,21 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 ## Recursos
 
 - WSDL-aware: lê o WSDL para descobrir endpoint, SOAPAction e operações
-- API tipada para `ReadView`, `ReadRecord`, `GetSchema`, `IsValidDataServer`,
-  `SaveRecord` (experimental), `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
+- API tipada para `ReadView`, `ReadRecord`, `ReadLookupView`, `GetSchema`,
+  `IsValidDataServer`, `SaveRecord`, `DeleteRecord`, `DeleteRecordByKey`
+  (escritas marcadas EXPERIMENTAL), `RealizarConsultaSQL`,
+  `RealizarConsultaSQLContexto`
+- `parseMode: "result-strict"` em `saveRecord`/`deleteRecord*` detecta
+  erros embutidos no Result e lança `RmResultError`
 - Basic Auth e Bearer Auth manual
 - `parseMode: "raw"` em todos os métodos para inspeção/escape hatch
 - Hierarquia de erros tipados (HTTP, SOAP Fault, parse, config, timeout)
 - `rm.diagnostics.*` — checagens estruturadas (WSDL, auth, smoke query)
 - Logger opcional com redaction automática de credenciais
 - Cache de WSDL em disco (opt-in na lib, ligado por padrão na CLI)
-- CLI `rmws` com subcomandos `inspect`, `read-view`, `save-record`, `sql`, `diagnose` e `catalog`
+- CLI `rmws` com subcomandos `inspect`, `read-view`, `read-lookup-view`,
+  `save-record`, `delete-record`, `delete-record-by-key`, `sql`,
+  `diagnose` e `catalog`
 - Catálogo embutido com 2.537 DataServers do RM (todos os módulos), opt-in via
   `import "rm-webservice-client/catalog"`
 - Sem dependências SOAP pesadas — apenas `fast-xml-parser` e `cac`
@@ -186,6 +192,59 @@ SOAP Envelope completo.
 > com `logger` configurado). Para depurar, é necessário ligar
 > explicitamente `logBody: true` — e mesmo aí senhas/tokens passam
 > pelo `redactString`. Não logue `saveRecord` em produção.
+
+### `deleteRecord(opts): Promise<string>` — **EXPERIMENTAL (escrita destrutiva)**
+
+> ⚠️ **Apaga registros do RM.** Use `parseMode: "result-strict"` para
+> que erros embutidos no Result virem `RmResultError` automaticamente.
+
+```ts
+const xml = `<NewDataSet><PPessoa><CODIGO>26620</CODIGO></PPessoa></NewDataSet>`;
+
+await rm.dataServer.deleteRecord({
+  dataServerName: "RhuPessoaData",
+  xml,
+  context: { CODCOLIGADA: 1, CODSISTEMA: "G", CODUSUARIO: "mestre" },
+  parseMode: "result-strict", // recomendado: lança RmResultError se RM rejeita
+});
+```
+
+Em sucesso, o `<DeleteRecordResult>` costuma vir vazio. Em FK violation
+ou regra de negócio, o RM volta com `HTTP 200 + texto de erro embutido`
+— exatamente o mesmo padrão de `saveRecord`. Por isso o
+`result-strict`.
+
+### `deleteRecordByKey(opts): Promise<string>` — **EXPERIMENTAL (escrita destrutiva)**
+
+> ⚠️ Mesma destrutividade do `deleteRecord`, sem precisar montar XML.
+
+```ts
+await rm.dataServer.deleteRecordByKey({
+  dataServerName: "RhuPessoaData",
+  primaryKey: 26620, // ou ["1", "abc"] para chave composta
+  parseMode: "result-strict",
+});
+```
+
+Chaves compostas em array são serializadas com `;` (igual `readRecord`).
+
+### `readLookupView<T>(opts): Promise<T[]>`
+
+```ts
+const opcoes = await rm.dataServer.readLookupView<{
+  CHAVE: string;
+  DESCRICAO: string;
+}>({
+  dataServerName: "AlgumLookupData",
+  filter: "...",
+  ownerData: "<X>1</X>", // opcional, depende do DataServer
+});
+```
+
+`ownerData` é uma string/XML específico de alguns DataServers que
+derivam o lookup de outro contexto. A maioria não precisa desse campo.
+`parseMode: "raw" | "dataset" | "records"` (default `records`), igual
+a `readView`.
 
 ## ConsultaSQL
 
@@ -525,6 +584,17 @@ npx rmws save-record GlbUsuarioData \
   --xml-file ./novo-usuario.xml \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre"
 
+# EXPERIMENTAL — escrita destrutiva
+npx rmws delete-record-by-key RhuPessoaData 26620 \
+  --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
+  --strict   # lança RmResultError se RM rejeitar (exit 6)
+
+npx rmws delete-record RhuPessoaData \
+  --xml-file ./remover.xml --strict
+
+npx rmws read-lookup-view AlgumLookupData \
+  --filter "X=1" --owner-data "<X>1</X>"
+
 npx rmws diagnose                          # roda dataServer + ConsultaSQL + auth
 npx rmws diagnose dataserver               # só dataServer
 npx rmws diagnose auth                     # só verificação de auth
@@ -577,6 +647,33 @@ Flags do `save-record` (**EXPERIMENTAL — escrita**):
 `--xml` e `--xml-file` são mutuamente exclusivos; pelo menos um é
 obrigatório.
 
+Flags do `delete-record` (**EXPERIMENTAL — escrita destrutiva**):
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--xml <content>`   | XML do dataset inline com as linhas a deletar                   |
+| `--xml-file <path>` | Caminho para arquivo com o XML                                  |
+| `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
+| `--strict`          | Lança `RmResultError` se RM rejeitar (exit code 6)              |
+
+Flags do `delete-record-by-key` (**EXPERIMENTAL — escrita destrutiva**):
+
+A chave primária é argumento posicional (`<primaryKey>`). Para chave
+composta, use vírgula: `delete-record-by-key X 1,abc,42`.
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
+| `--strict`          | Lança `RmResultError` se RM rejeitar (exit code 6)              |
+
+Flags do `read-lookup-view`:
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--filter <expr>`   | Filtro RM                                                       |
+| `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
+| `--owner-data <s>`  | OwnerData (string/XML específico do DataServer)                 |
+
 Flags do `catalog`:
 
 | Flag                | Descrição                                                       |
@@ -603,15 +700,16 @@ Flags do `diagnose`:
 
 Códigos de saída:
 
-| Código | Significado          |
-|--------|----------------------|
-| 0      | Sucesso              |
-| 1      | Erro de configuração |
-| 2      | HTTP                 |
-| 3      | SOAP Fault           |
-| 4      | Erro de parse        |
-| 5      | Timeout              |
-| 99     | Erro desconhecido    |
+| Código | Significado                                              |
+|--------|----------------------------------------------------------|
+| 0      | Sucesso                                                  |
+| 1      | Erro de configuração                                     |
+| 2      | HTTP                                                     |
+| 3      | SOAP Fault                                               |
+| 4      | Erro de parse                                            |
+| 5      | Timeout                                                  |
+| 6      | `RmResultError` (RM rejeitou via `--strict`/result-strict) |
+| 99     | Erro desconhecido                                        |
 
 ## Variáveis de ambiente (CLI)
 
@@ -645,7 +743,6 @@ RM_WSDL_CACHE_DIR=/tmp/rmws      # opcional, diretório custom
 
 ## Operações fora desta release
 
-- `DeleteRecord`, `DeleteRecordByKey`, `ReadLookupView` (planejados pra `0.4.0`)
 - `rmws generate-types` a partir de `GetSchema` (`0.5.0`)
 - Builder de XML para gravação (`buildRecord`) em cima do schema parseado
   (`0.6.0`)
