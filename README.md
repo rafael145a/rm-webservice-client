@@ -175,18 +175,33 @@ SOAP Envelope completo.
 > Quando o `DataServer` rejeita por regra de negócio (FK violation,
 > validação custom em `.NET`, campo obrigatório), o RM responde com
 > **HTTP 200 + SOAP válido** e coloca a mensagem de erro como **texto
-> livre** dentro de `<SaveRecordResult>`. A lib não tem como diferenciar
-> isso de um sucesso, então a string volta intacta.
+> livre** dentro de `<SaveRecordResult>`.
 >
-> Sempre valide o retorno antes de assumir que gravou:
+> Use `parseMode: "result-strict"` para que essa string vire um
+> `RmResultError` automaticamente — recomendado em produção:
 >
 > ```ts
-> const result = await rm.dataServer.saveRecord({ ... });
-> if (/Violação|Erro|====|at RM\./.test(result)) {
->   throw new Error(`SaveRecord rejeitado pelo RM: ${result}`);
+> import { RmResultError } from "rm-webservice-client";
+>
+> try {
+>   const pk = await rm.dataServer.saveRecord({
+>     dataServerName: "GlbUsuarioData",
+>     xml,
+>     parseMode: "result-strict",
+>   });
+>   // pk é a chave gerada (string curta), garantido
+> } catch (err) {
+>   if (err instanceof RmResultError) {
+>     console.error(err.summary, err.sql);
+>   }
+>   throw err;
 > }
-> // só agora result é a chave gerada
 > ```
+>
+> Para inspeção/debug, `parseMode: "result"` (default) devolve a
+> string crua sem detecção; `parseMode: "raw"` devolve o SOAP envelope
+> completo. Ou use o helper público `detectRmResultError(s)` se quiser
+> a heurística sem a exception.
 
 > **Logging**: o XML do payload **nunca** é logado por padrão (mesmo
 > com `logger` configurado). Para depurar, é necessário ligar
@@ -326,16 +341,29 @@ Regras:
 
 ## `parseMode`
 
-Todos os métodos que retornam dados aceitam:
+Modos disponíveis nos métodos de **leitura**:
 
 | Mode      | Retorno                                                         |
 |-----------|-----------------------------------------------------------------|
-| `records` | `T[]` (default em `readView`/`query`/`queryWithContext`)        |
+| `records` | `T[]` (default em `readView`/`readLookupView`/`query`/`queryWithContext`) |
 | `record`  | `T \| null` (default em `readRecord`)                           |
 | `dataset` | XML interno (string do `NewDataSet`) — para parsing customizado |
 | `raw`     | XML SOAP cru, antes de extrair `Result`                         |
 
+Modos disponíveis nos métodos de **escrita** (`saveRecord`,
+`deleteRecord`, `deleteRecordByKey`):
+
+| Mode             | Retorno                                                  |
+|------------------|----------------------------------------------------------|
+| `result`         | conteúdo cru do `<...Result>` (default — string)         |
+| `result-strict`  | igual `result`, mas erros embutidos pelo RM viram `RmResultError` |
+| `raw`            | XML SOAP cru, antes de extrair `Result`                  |
+
 `raw` é o escape hatch para quando o RM devolver algo inesperado.
+`result-strict` é o recomendado em produção pra escritas — o RM
+retorna `HTTP 200` mesmo quando rejeita por regra de negócio, e essa
+flag detecta isso automaticamente. Veja a seção `saveRecord` acima
+para o padrão de uso.
 
 ## Comportamentos do TOTVS RM observados em produção
 
@@ -378,11 +406,39 @@ import {
   RmHttpError,       // status: number, responseText: string
   RmSoapFaultError,  // faultCode, faultString, status?
   RmParseError,      // operationName, resultElement
+  RmResultError,     // erro embutido em <...Result> (ver result-strict)
   RmTimeoutError,    // timeoutMs
 } from "rm-webservice-client";
 ```
 
 Todas as classes têm `code` para discriminar via `error.code === "RM_HTTP_ERROR"`.
+
+`RmResultError` é específico das ops de escrita (`saveRecord`,
+`deleteRecord`, `deleteRecordByKey`) e só é disparado com
+`parseMode: "result-strict"`. Expõe:
+
+```ts
+err.code           // "RM_RESULT_ERROR"
+err.operationName  // "SaveRecord" | "DeleteRecord" | "DeleteRecordByKey"
+err.summary        // primeira linha do Result (ex.: "Violação de chave estrangeira")
+err.sql?           // trecho INSERT/UPDATE/DELETE quando há erro de DB
+err.stack?         // stack trace .NET embutido
+err.raw            // string completa do <...Result>
+```
+
+Detecção sem exception via helper público:
+
+```ts
+import { detectRmResultError } from "rm-webservice-client";
+
+const result = await rm.dataServer.saveRecord({ ... }); // parseMode "result"
+const errorMatch = detectRmResultError(result);
+if (errorMatch) {
+  console.error(errorMatch.summary, errorMatch.sql);
+} else {
+  // result é o PK gerado
+}
+```
 
 ## Logging
 
