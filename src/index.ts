@@ -1,4 +1,4 @@
-export const VERSION = "0.6.0";
+export const VERSION = "1.0.0";
 
 export { createRmClient } from "./client/create-rm-client.js";
 export type {
@@ -9,16 +9,19 @@ export type {
   ConsultaSqlOptions,
   ConsultaSqlWithContextOptions,
   DataServerClient,
+  DataServerNameInput,
+  DeleteRecordByKeyOptions,
+  DeleteRecordOptions,
   DiagnosticReport,
   DiagnosticStep,
   DiagnosticsClient,
-  DataServerNameInput,
   GetSchemaOptions,
   IsValidDataServerOptions,
   KnownDataServerName,
   ParseModeArray,
   ParseModeRecord,
   ParseModeSaveRecord,
+  ReadLookupViewOptions,
   ReadRecordOptions,
   ReadViewOptions,
   RmClient,

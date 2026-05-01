@@ -90,7 +90,7 @@ cli
   });
 
 cli
-  .command("save-record <dataServerName>", "DataServer SaveRecord (EXPERIMENTAL — escrita)")
+  .command("save-record <dataServerName>", "DataServer SaveRecord (escrita)")
   .option("--xml <content>", "XML do dataset (NewDataSet/Row) inline")
   .option("--xml-file <path>", "Caminho para arquivo com XML do dataset")
   .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
@@ -102,7 +102,7 @@ cli
 cli
   .command(
     "delete-record <dataServerName>",
-    "DataServer DeleteRecord (EXPERIMENTAL — escrita destrutiva)",
+    "DataServer DeleteRecord (escrita destrutiva)",
   )
   .option("--xml <content>", "XML do dataset (NewDataSet/Row) inline")
   .option("--xml-file <path>", "Caminho para arquivo com XML do dataset")
@@ -119,7 +119,7 @@ cli
 cli
   .command(
     "delete-record-by-key <dataServerName> <primaryKey>",
-    "DataServer DeleteRecordByKey (EXPERIMENTAL — escrita destrutiva)",
+    "DataServer DeleteRecordByKey (escrita destrutiva)",
   )
   .option(
     "--context <ctx>",
