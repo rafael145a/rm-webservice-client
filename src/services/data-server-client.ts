@@ -14,6 +14,7 @@ import type {
   IsValidDataServerOptions,
   ReadRecordOptions,
   ReadViewOptions,
+  SaveRecordOptions,
 } from "../client/types.js";
 
 export interface CreateDataServerClientOptions {
@@ -122,6 +123,22 @@ export function createDataServerClient(
         soapXml: xml,
         resultElementName: "GetSchemaResult",
         operationName: "GetSchema",
+      });
+    },
+
+    async saveRecord(opts: SaveRecordOptions): Promise<string> {
+      const xml = await call("SaveRecord", {
+        DataServerName: opts.dataServerName,
+        XML: opts.xml,
+        Contexto: effectiveContext(opts.context),
+      });
+
+      if (opts.parseMode === "raw") return xml;
+
+      return extractResultXml({
+        soapXml: xml,
+        resultElementName: "SaveRecordResult",
+        operationName: "SaveRecord",
       });
     },
 

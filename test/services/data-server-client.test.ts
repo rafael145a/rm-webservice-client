@@ -330,6 +330,160 @@ describe("DataServerClient.isValidDataServer", () => {
   });
 });
 
+describe("DataServerClient.saveRecord", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  const datasetXml =
+    "<NewDataSet><GUsuario><CODUSUARIO>novo</CODUSUARIO><NOME>Fulano</NOME></GUsuario></NewDataSet>";
+
+  it("retorna string do SaveRecordResult (chave gerada)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-saverecord.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+      context: { CODCOLIGADA: 1, CODSISTEMA: "G", CODUSUARIO: "mestre" },
+    });
+    expect(result).toBe("1;mestre");
+  });
+
+  it("retorna string vazia quando SaveRecordResult está vazio", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-saverecord-empty.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+    });
+    expect(result).toBe("");
+  });
+
+  it("parseMode raw retorna SOAP envelope cru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-saverecord.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+      parseMode: "raw",
+    });
+    expect(result).toContain("<SaveRecordResponse");
+    expect(result).toContain("<SaveRecordResult>1;mestre</SaveRecordResult>");
+  });
+
+  it("envia DataServerName, XML e Contexto no body com XML escapado", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-saverecord.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+      context: "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre",
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const body = init.body as string;
+    expect(body).toContain("<tot:DataServerName>GlbUsuarioData</tot:DataServerName>");
+    expect(body).toContain(
+      "<tot:XML>&lt;NewDataSet&gt;&lt;GUsuario&gt;&lt;CODUSUARIO&gt;novo&lt;/CODUSUARIO&gt;",
+    );
+    expect(body).toContain(
+      "<tot:Contexto>CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre</tot:Contexto>",
+    );
+    expect(body).not.toContain("<NewDataSet>");
+  });
+
+  it("envia SOAPAction de SaveRecord", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-saverecord.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers.SOAPAction).toBe(
+      '"http://www.totvs.com/IwsDataServer/SaveRecord"',
+    );
+  });
+
+  it("aplica defaults.context quando opts.context é omitido", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-saverecord.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient({
+      ...baseConfig,
+      defaults: {
+        context: { CODCOLIGADA: 1, CODSISTEMA: "G", CODUSUARIO: "mestre" },
+      },
+    });
+    await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+    });
+
+    const body = (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string;
+    expect(body).toContain(
+      "<tot:Contexto>CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre</tot:Contexto>",
+    );
+  });
+
+  it("propaga RmSoapFaultError quando o RM retorna fault", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("soap-fault.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.saveRecord({
+        dataServerName: "GlbUsuarioData",
+        xml: datasetXml,
+      }),
+    ).rejects.toMatchObject({ code: "RM_SOAP_FAULT" });
+  });
+
+  it("não loga o XML do payload por padrão (logBody=false implícito)", async () => {
+    const debug = vi.fn();
+    const logger = {
+      debug,
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-saverecord.xml"))),
+    );
+
+    const rm = createRmClient({ ...baseConfig, logger });
+    await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      xml: datasetXml,
+    });
+
+    const calls = debug.mock.calls.map((c) => JSON.stringify(c));
+    expect(calls.join("\n")).not.toContain(datasetXml);
+    expect(calls.join("\n")).not.toContain("&lt;NewDataSet&gt;");
+  });
+});
+
 describe("DataServerClient — operação ausente no service", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 

@@ -2,9 +2,11 @@ import { cac } from "cac";
 
 import { VERSION } from "../index.js";
 
+import { catalogCommand, type CatalogFlags } from "./commands/catalog.js";
 import { diagnoseCommand, type DiagnoseFlags } from "./commands/diagnose.js";
 import { inspectCommand } from "./commands/inspect.js";
 import { readViewCommand, type ReadViewFlags } from "./commands/read-view.js";
+import { saveRecordCommand, type SaveRecordFlags } from "./commands/save-record.js";
 import { sqlCommand, type SqlFlags } from "./commands/sql.js";
 import { exitCodeFor } from "./exit-codes.js";
 
@@ -38,6 +40,28 @@ cli
   .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
   .action(async (dataServerName: string, flags: ReadViewFlags) => {
     const out = await readViewCommand(dataServerName, flags);
+    process.stdout.write(out + "\n");
+  });
+
+cli
+  .command("catalog", "Lista DataServers do catálogo oficial TOTVS (offline, embutido)")
+  .option("--module <name>", "Filtra por módulo (ex.: 'Recursos Humanos')")
+  .option("--search <q>", "Busca em nome ou descrição")
+  .option("--released", "Apenas DataServers marcados como liberados pela TOTVS")
+  .option("--limit <n>", "Limita o número de resultados")
+  .option("--modules", "Lista apenas os nomes dos módulos")
+  .option("--json", "Saída em JSON")
+  .action((flags: CatalogFlags) => {
+    process.stdout.write(catalogCommand(flags) + "\n");
+  });
+
+cli
+  .command("save-record <dataServerName>", "DataServer SaveRecord (EXPERIMENTAL — escrita)")
+  .option("--xml <content>", "XML do dataset (NewDataSet/Row) inline")
+  .option("--xml-file <path>", "Caminho para arquivo com XML do dataset")
+  .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
+  .action(async (dataServerName: string, flags: SaveRecordFlags) => {
+    const out = await saveRecordCommand(dataServerName, flags);
     process.stdout.write(out + "\n");
   });
 

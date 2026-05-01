@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <SaveRecordResponse xmlns="http://www.totvs.com/">
+      <SaveRecordResult></SaveRecordResult>
+    </SaveRecordResponse>
+  </s:Body>
+</s:Envelope>

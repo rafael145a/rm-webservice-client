@@ -1,4 +1,4 @@
-export const VERSION = "0.2.1";
+export const VERSION = "0.3.1";
 
 export { createRmClient } from "./client/create-rm-client.js";
 export type {
@@ -12,15 +12,19 @@ export type {
   DiagnosticReport,
   DiagnosticStep,
   DiagnosticsClient,
+  DataServerNameInput,
   GetSchemaOptions,
   IsValidDataServerOptions,
+  KnownDataServerName,
   ParseModeArray,
   ParseModeRecord,
+  ParseModeSaveRecord,
   ReadRecordOptions,
   ReadViewOptions,
   RmClient,
   RmClientOptions,
   RmSoapServiceOptions,
+  SaveRecordOptions,
 } from "./client/types.js";
 
 export type { RmAuth } from "./auth/auth-types.js";

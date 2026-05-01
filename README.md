@@ -11,14 +11,16 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 
 - WSDL-aware: lê o WSDL para descobrir endpoint, SOAPAction e operações
 - API tipada para `ReadView`, `ReadRecord`, `GetSchema`, `IsValidDataServer`,
-  `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
+  `SaveRecord` (experimental), `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
 - Basic Auth e Bearer Auth manual
 - `parseMode: "raw"` em todos os métodos para inspeção/escape hatch
 - Hierarquia de erros tipados (HTTP, SOAP Fault, parse, config, timeout)
 - `rm.diagnostics.*` — checagens estruturadas (WSDL, auth, smoke query)
 - Logger opcional com redaction automática de credenciais
 - Cache de WSDL em disco (opt-in na lib, ligado por padrão na CLI)
-- CLI `rmws` com subcomandos `inspect`, `read-view`, `sql` e `diagnose`
+- CLI `rmws` com subcomandos `inspect`, `read-view`, `save-record`, `sql`, `diagnose` e `catalog`
+- Catálogo embutido com 2.537 DataServers do RM (todos os módulos), opt-in via
+  `import "rm-webservice-client/catalog"`
 - Sem dependências SOAP pesadas — apenas `fast-xml-parser` e `cac`
 - Funciona com `fetch` nativo do Node 18+
 
@@ -132,6 +134,58 @@ const ok = await rm.dataServer.isValidDataServer({
   dataServerName: "GlbUsuarioData",
 });
 ```
+
+### `saveRecord(opts): Promise<string>` — **EXPERIMENTAL (escrita)**
+
+> ⚠️ **Operação destrutiva.** Grava dados no RM. Sempre teste em
+> homologação antes de produção. A lib **não** monta o XML pra você —
+> você passa o `<NewDataSet>...</NewDataSet>` cru, igual ao que o RM
+> espera. Isso é deliberado: builders virão na `0.6.0` em cima do
+> `GetSchema` parseado (`0.5.0`), não antes.
+
+```ts
+const xml = `<NewDataSet>
+  <GUsuario>
+    <CODUSUARIO>novo</CODUSUARIO>
+    <NOME>Fulano de Tal</NOME>
+    <ATIVO>1</ATIVO>
+  </GUsuario>
+</NewDataSet>`;
+
+const primaryKey = await rm.dataServer.saveRecord({
+  dataServerName: "GlbUsuarioData",
+  xml,
+  context: { CODCOLIGADA: 1, CODSISTEMA: "G", CODUSUARIO: "mestre" },
+});
+// primaryKey: "1;novo"  (formato depende do DataServer)
+```
+
+Retorno: o conteúdo de `<SaveRecordResult>` como string. Para
+DataServers com chave única costuma ser `"1;CHAVE"`; para chaves
+compostas, separadas por `;`. Use `parseMode: "raw"` se precisar do
+SOAP Envelope completo.
+
+> ⚠️ **Erros do RM voltam embutidos no Result, não como SOAP Fault.**
+> Quando o `DataServer` rejeita por regra de negócio (FK violation,
+> validação custom em `.NET`, campo obrigatório), o RM responde com
+> **HTTP 200 + SOAP válido** e coloca a mensagem de erro como **texto
+> livre** dentro de `<SaveRecordResult>`. A lib não tem como diferenciar
+> isso de um sucesso, então a string volta intacta.
+>
+> Sempre valide o retorno antes de assumir que gravou:
+>
+> ```ts
+> const result = await rm.dataServer.saveRecord({ ... });
+> if (/Violação|Erro|====|at RM\./.test(result)) {
+>   throw new Error(`SaveRecord rejeitado pelo RM: ${result}`);
+> }
+> // só agora result é a chave gerada
+> ```
+
+> **Logging**: o XML do payload **nunca** é logado por padrão (mesmo
+> com `logger` configurado). Para depurar, é necessário ligar
+> explicitamente `logBody: true` — e mesmo aí senhas/tokens passam
+> pelo `redactString`. Não logue `saveRecord` em produção.
 
 ## ConsultaSQL
 
@@ -377,6 +431,81 @@ const rm = createRmClient({
 });
 ```
 
+## Autocomplete de `dataServerName`
+
+Os 2.537 nomes do catálogo TOTVS aparecem no autocomplete da sua IDE
+direto nas chamadas (`readView`, `readRecord`, `getSchema`,
+`isValidDataServer`, `saveRecord`):
+
+```ts
+const ok = await rm.dataServer.isValidDataServer({
+  dataServerName: "Rhu",  // IDE sugere RhuPessoaData, RhuFuncionarioData, ...
+});
+```
+
+Quando o DataServer da sua instância **não está no catálogo** (custom
+do produto, builder externo, etc.) — sem problema, qualquer string
+continua aceita:
+
+```ts
+const records = await rm.dataServer.readView({
+  dataServerName: "MeuDataServerCustomData",
+});
+```
+
+O tipo `DataServerNameInput = KnownDataServerName | (string & Record<never, never>)`
+faz isso: union literal pra autocomplete + `& Record<never, never>` pra
+não bloquear strings arbitrárias. Custo runtime: zero (são só tipos).
+
+## Catálogo de DataServers
+
+A lib embute o índice oficial da TOTVS
+(`https://apitotvslegado.z15.web.core.windows.net/`) — 2.537 DataServers em
+33 módulos, com nome, descrição, módulo e flag de "Liberado". É um subpath
+import: quem não usar não paga pelo bundle.
+
+```ts
+import {
+  KNOWN_DATASERVERS,
+  KNOWN_MODULES,
+  findDataServer,
+  searchDataServers,
+  CATALOG_META,
+} from "rm-webservice-client/catalog";
+
+// Achei pelo nome
+findDataServer("RhuPessoaData");
+// → { name: "RhuPessoaData", module: "Recursos Humanos",
+//     description: "Pessoas", released: true }
+
+// Busca livre
+searchDataServers({ query: "pessoa", releasedOnly: true });
+// → [{ name: "RhuPessoaData", ... }, { name: "EduPessoaData", ... }, ...]
+
+// Filtra por módulo
+searchDataServers({ module: "Recursos Humanos", limit: 10 });
+```
+
+> ⚠️ O catálogo lista o que existe **no produto RM oficial**. Cada
+> instância (cloud/on-prem, módulos contratados) expõe um subconjunto
+> diferente. A verdade definitiva continua sendo
+> `rm.dataServer.isValidDataServer({ dataServerName })` na sua instância.
+
+Regenerar a partir do índice TOTVS (após atualizações da fonte):
+
+```bash
+npm run build:catalog
+```
+
+Equivalente na CLI:
+
+```bash
+npx rmws catalog --search pessoa --released
+npx rmws catalog --module "Recursos Humanos" --limit 20
+npx rmws catalog --modules                    # lista módulos
+npx rmws catalog --search funcionario --json  # estruturado
+```
+
 ## CLI `rmws`
 
 ```bash
@@ -390,6 +519,11 @@ npx rmws read-view GlbUsuarioData \
 npx rmws sql EDU.ALUNOS.ATIVOS \
   --coligada 1 --sistema S \
   --params "CODFILIAL=1"
+
+# EXPERIMENTAL — escrita
+npx rmws save-record GlbUsuarioData \
+  --xml-file ./novo-usuario.xml \
+  --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre"
 
 npx rmws diagnose                          # roda dataServer + ConsultaSQL + auth
 npx rmws diagnose dataserver               # só dataServer
@@ -415,6 +549,44 @@ Flags globais:
 | `--no-wsdl-cache`        | Desliga o cache em disco do WSDL (default: ligado na CLI)      |
 | `--wsdl-cache-ttl <ms>`  | TTL do cache de WSDL (default: 24h)                            |
 | `--wsdl-cache-dir <dir>` | Diretório do cache de WSDL (default: `~/.cache/rm-webservice-client`) |
+
+Flags do `read-view`:
+
+| Flag                | Descrição                              |
+|---------------------|----------------------------------------|
+| `--filter <expr>`   | Filtro RM (ex.: `"PPESSOA.CODIGO=1"`)  |
+| `--context <ctx>`   | Contexto (string ou `K=V;K=V`)         |
+
+Flags do `sql`:
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--coligada <n>`    | Código da coligada                                              |
+| `--sistema <s>`     | Código do sistema (`G`, `S`, `F`, …)                            |
+| `--params <p>`      | Parâmetros (string ou `K=V;K=V`)                                |
+| `--context <ctx>`   | Contexto (usa `queryWithContext` quando presente)               |
+
+Flags do `save-record` (**EXPERIMENTAL — escrita**):
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--xml <content>`   | XML do dataset inline (`<NewDataSet>...`)                       |
+| `--xml-file <path>` | Caminho para arquivo com o XML do dataset                       |
+| `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
+
+`--xml` e `--xml-file` são mutuamente exclusivos; pelo menos um é
+obrigatório.
+
+Flags do `catalog`:
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--module <name>`   | Filtra por módulo (ex.: `"Recursos Humanos"`)                   |
+| `--search <q>`      | Busca em nome ou descrição (case-insensitive)                   |
+| `--released`        | Apenas DataServers marcados como liberados pela TOTVS           |
+| `--limit <n>`       | Limita o número de resultados                                   |
+| `--modules`         | Lista apenas os nomes dos módulos                               |
+| `--json`            | Saída em JSON (com `meta` + `items`)                            |
 
 Flags do `diagnose`:
 
@@ -473,9 +645,11 @@ RM_WSDL_CACHE_DIR=/tmp/rmws      # opcional, diretório custom
 
 ## Operações fora desta release
 
-- `SaveRecord`, `DeleteRecord`, `DeleteRecordByKey`, `ReadLookupView`
+- `DeleteRecord`, `DeleteRecordByKey`, `ReadLookupView` (planejados pra `0.4.0`)
+- `rmws generate-types` a partir de `GetSchema` (`0.5.0`)
+- Builder de XML para gravação (`buildRecord`) em cima do schema parseado
+  (`0.6.0`)
 - `AutenticaAcesso` automático com cache de token
-- `rmws generate-types` a partir de `GetSchema`
 
 ## Licença
 

@@ -1,7 +1,22 @@
 import type { RmAuth } from "../auth/auth-types.js";
+import type { KnownDataServerName } from "../catalog/known-names.js";
 import type { RmLogger } from "../logging/types.js";
 import type { RmContext, RmParameters, Separator } from "../rm/types.js";
 import type { WsdlCacheOptions } from "../wsdl/wsdl-cache.js";
+
+/**
+ * Nome de DataServer aceito pelas operações tipadas.
+ *
+ * - Os 2.537 nomes do catálogo oficial TOTVS aparecem no autocomplete.
+ * - O `& Record<never, never>` (intersection com objeto vazio) preserva
+ *   a aceitação de qualquer string — útil pra DataServers customizados
+ *   ou da sua instância que não estão no catálogo público.
+ */
+export type DataServerNameInput =
+  | KnownDataServerName
+  | (string & Record<never, never>);
+
+export type { KnownDataServerName } from "../catalog/known-names.js";
 
 export interface RmSoapServiceOptions {
   wsdlUrl?: string;
@@ -32,27 +47,36 @@ export type ParseModeArray = "raw" | "records" | "dataset";
 export type ParseModeRecord = "raw" | "record" | "dataset";
 
 export interface ReadViewOptions {
-  dataServerName: string;
+  dataServerName: DataServerNameInput;
   filter?: string;
   context?: RmContext;
   parseMode?: ParseModeArray;
 }
 
 export interface ReadRecordOptions {
-  dataServerName: string;
+  dataServerName: DataServerNameInput;
   primaryKey: string | number | Array<string | number>;
   context?: RmContext;
   parseMode?: ParseModeRecord;
 }
 
 export interface GetSchemaOptions {
-  dataServerName: string;
+  dataServerName: DataServerNameInput;
   context?: RmContext;
 }
 
 export interface IsValidDataServerOptions {
-  dataServerName: string;
+  dataServerName: DataServerNameInput;
   context?: RmContext;
+}
+
+export type ParseModeSaveRecord = "raw" | "result";
+
+export interface SaveRecordOptions {
+  dataServerName: DataServerNameInput;
+  xml: string;
+  context?: RmContext;
+  parseMode?: ParseModeSaveRecord;
 }
 
 export interface DataServerClient {
@@ -65,6 +89,8 @@ export interface DataServerClient {
   getSchema(options: GetSchemaOptions): Promise<string>;
 
   isValidDataServer(options: IsValidDataServerOptions): Promise<boolean>;
+
+  saveRecord(options: SaveRecordOptions): Promise<string>;
 }
 
 export interface ConsultaSqlOptions {

@@ -12,6 +12,17 @@ export default defineConfig([
     outDir: "dist",
   },
   {
+    entry: { "catalog/index": "src/catalog/index.ts" },
+    format: ["esm", "cjs"],
+    dts: true,
+    clean: false,
+    splitting: false,
+    sourcemap: true,
+    target: "node18",
+    outDir: "dist",
+    loader: { ".json": "json" },
+  },
+  {
     entry: { "cli/index": "src/cli/index.ts" },
     format: ["esm"],
     dts: false,
@@ -21,5 +32,6 @@ export default defineConfig([
     target: "node18",
     outDir: "dist",
     banner: { js: "#!/usr/bin/env node" },
+    loader: { ".json": "json" },
   },
 ]);
