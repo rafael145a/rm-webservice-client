@@ -1,6 +1,7 @@
 import type { RmAuth } from "../auth/auth-types.js";
 import type { KnownDataServerName } from "../catalog/known-names.js";
 import type { RmLogger } from "../logging/types.js";
+import type { BuildRecordOptions, RmRecordsInput } from "../schema/build-types.js";
 import type { RmDataServerSchema } from "../schema/types.js";
 import type { RmContext, RmParameters, Separator } from "../rm/types.js";
 import type { WsdlCacheOptions } from "../wsdl/wsdl-cache.js";
@@ -84,7 +85,15 @@ export type ParseModeSaveRecord = "raw" | "result" | "result-strict";
 
 export interface SaveRecordOptions {
   dataServerName: DataServerNameInput;
-  xml: string;
+  /** XML do dataset cru (`<NewDataSet>...`). Mutex com `fields`. */
+  xml?: string;
+  /**
+   * Atalho do builder (0.6.0): a lib busca o schema, valida os campos
+   * e monta o XML automaticamente. Mutex com `xml`.
+   */
+  fields?: RmRecordsInput;
+  /** Opções de build quando `fields` é usado. */
+  build?: BuildRecordOptions;
   context?: RmContext;
   parseMode?: ParseModeSaveRecord;
 }
@@ -137,6 +146,19 @@ export interface DataServerClient {
   isValidDataServer(options: IsValidDataServerOptions): Promise<boolean>;
 
   saveRecord(options: SaveRecordOptions): Promise<string>;
+
+  /**
+   * Constrói o XML do payload de SaveRecord/DeleteRecord a partir dos
+   * `fields` tipados, validando contra o schema do DataServer (busca
+   * automaticamente, com cache em memória). Pode ser usado standalone
+   * (devolve o XML pra inspeção) ou alimentar `saveRecord` com o
+   * resultado.
+   */
+  buildRecord(
+    dataServerName: DataServerNameInput,
+    fields: RmRecordsInput,
+    options?: BuildRecordOptions & { context?: RmContext },
+  ): Promise<string>;
 
   deleteRecord(options: DeleteRecordOptions): Promise<string>;
 

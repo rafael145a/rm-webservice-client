@@ -577,6 +577,127 @@ describe("DataServerClient.saveRecord", () => {
   });
 });
 
+describe("DataServerClient.buildRecord (runtime)", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("busca schema via getSchema e gera XML", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(fixture("dataserver-getschema-full.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    const xml = await rm.dataServer.buildRecord("GlbUsuarioData", {
+      CODUSUARIO: "TEST",
+      STATUS: 1,
+    });
+    expect(xml).toContain("<NewDataSet>");
+    expect(xml).toContain("<GUSUARIO>");
+    expect(xml).toContain("<CODUSUARIO>TEST</CODUSUARIO>");
+    expect(xml).toContain("<STATUS>1</STATUS>");
+  });
+
+  it("cacheia schema entre chamadas (1 GetSchema, N buildRecord)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(fixture("dataserver-getschema-full.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    const fields = { CODUSUARIO: "X" };
+    await rm.dataServer.buildRecord("GlbUsuarioData", fields);
+    await rm.dataServer.buildRecord("GlbUsuarioData", fields);
+    await rm.dataServer.buildRecord("GlbUsuarioData", fields);
+
+    const getSchemaCalls = fetchMock.mock.calls.filter(([, init]) =>
+      String((init as RequestInit | undefined)?.body ?? "").includes(":GetSchema>"),
+    );
+    expect(getSchemaCalls.length).toBe(1);
+  });
+
+  it("propaga RmValidationError do builder", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-getschema-full.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.buildRecord("GlbUsuarioData", {
+        CAMPO_DESCONHECIDO: "x",
+      }),
+    ).rejects.toMatchObject({ code: "RM_VALIDATION_ERROR" });
+  });
+});
+
+describe("DataServerClient.saveRecord — atalho fields", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("aceita fields e monta XML automaticamente", async () => {
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce(
+      new Response(fixture("dataserver-getschema-full.xml")), // GetSchema
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(fixture("dataserver-saverecord.xml")), // SaveRecord
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.saveRecord({
+      dataServerName: "GlbUsuarioData",
+      fields: { CODUSUARIO: "novo" },
+    });
+    expect(result).toBe("1;mestre");
+
+    // O 2º fetch (SaveRecord) recebeu o XML montado pelo builder
+    const saveCall = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const body = saveCall.body as string;
+    expect(body).toContain("<tot:XML>");
+    expect(body).toContain("&lt;NewDataSet&gt;");
+    expect(body).toContain("&lt;GUSUARIO&gt;");
+    expect(body).toContain("&lt;CODUSUARIO&gt;novo&lt;/CODUSUARIO&gt;");
+  });
+
+  it("lança RmConfigError quando xml e fields são passados juntos", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.saveRecord({
+        dataServerName: "X",
+        xml: "<NewDataSet/>",
+        fields: { A: 1 },
+      }),
+    ).rejects.toMatchObject({ code: "RM_CONFIG_ERROR" });
+  });
+
+  it("lança RmConfigError quando nem xml nem fields são passados", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.saveRecord({ dataServerName: "X" }),
+    ).rejects.toMatchObject({ code: "RM_CONFIG_ERROR" });
+  });
+
+  it("propaga RmValidationError quando fields inválidos (antes de chamar SaveRecord)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(fixture("dataserver-getschema-full.xml")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.saveRecord({
+        dataServerName: "GlbUsuarioData",
+        fields: { CAMPO_DESCONHECIDO: "x" },
+      }),
+    ).rejects.toMatchObject({ code: "RM_VALIDATION_ERROR" });
+    // Só o GetSchema foi disparado, SaveRecord não
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("DataServerClient.deleteRecordByKey", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 

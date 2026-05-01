@@ -5,6 +5,7 @@ import {
   RmResultError,
   RmSoapFaultError,
   RmTimeoutError,
+  RmValidationError,
 } from "../errors/index.js";
 
 export const EXIT_CODES = {
@@ -14,6 +15,7 @@ export const EXIT_CODES = {
   PARSE: 4,
   TIMEOUT: 5,
   RESULT: 6,
+  VALIDATION: 7,
   UNKNOWN: 99,
 } as const;
 
@@ -24,6 +26,7 @@ export function exitCodeFor(err: unknown): number {
   if (err instanceof RmParseError) return EXIT_CODES.PARSE;
   if (err instanceof RmTimeoutError) return EXIT_CODES.TIMEOUT;
   if (err instanceof RmResultError) return EXIT_CODES.RESULT;
+  if (err instanceof RmValidationError) return EXIT_CODES.VALIDATION;
   return EXIT_CODES.UNKNOWN;
 }
 
@@ -41,6 +44,8 @@ export function exitCodeForCode(code: string): number {
       return EXIT_CODES.TIMEOUT;
     case "RM_RESULT_ERROR":
       return EXIT_CODES.RESULT;
+    case "RM_VALIDATION_ERROR":
+      return EXIT_CODES.VALIDATION;
     default:
       return EXIT_CODES.UNKNOWN;
   }

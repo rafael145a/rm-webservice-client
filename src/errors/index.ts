@@ -5,3 +5,8 @@ export { RmSoapFaultError } from "./rm-soap-fault-error.js";
 export { RmParseError } from "./rm-parse-error.js";
 export { RmResultError } from "./rm-result-error.js";
 export { RmTimeoutError } from "./rm-timeout-error.js";
+export { RmValidationError } from "./rm-validation-error.js";
+export type {
+  RmValidationIssue,
+  RmValidationIssueKind,
+} from "./rm-validation-error.js";
