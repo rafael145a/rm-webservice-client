@@ -2,6 +2,7 @@ import { cac } from "cac";
 
 import { VERSION } from "../index.js";
 
+import { buildRecordCommand, type BuildRecordFlags } from "./commands/build-record.js";
 import { catalogCommand, type CatalogFlags } from "./commands/catalog.js";
 import {
   deleteRecordByKeyCommand,
@@ -72,7 +73,24 @@ cli
   });
 
 cli
-  .command("save-record <dataServerName>", "DataServer SaveRecord (EXPERIMENTAL — escrita)")
+  .command(
+    "build-record <dataServerName>",
+    "Constrói XML de SaveRecord/DeleteRecord usando o schema do DataServer",
+  )
+  .option("--fields-json <json>", "Campos como JSON inline")
+  .option("--fields-file <path>", "Caminho para arquivo JSON com os campos")
+  .option("--row <name>", "Nome da row do schema (default: master)")
+  .option("--context <ctx>", "Contexto para buscar o schema (string ou K=V;K=V)")
+  .option("--out <path>", "Caminho do arquivo XML de destino (default: stdout)")
+  .option("--bypass-validation", "Pula validação de tipos / required / maxLength")
+  .option("--allow-unknown", "Aceita campos não declarados no schema sem lançar")
+  .action(async (dataServerName: string, flags: BuildRecordFlags) => {
+    const out = await buildRecordCommand(dataServerName, flags);
+    process.stdout.write(out + "\n");
+  });
+
+cli
+  .command("save-record <dataServerName>", "DataServer SaveRecord (escrita)")
   .option("--xml <content>", "XML do dataset (NewDataSet/Row) inline")
   .option("--xml-file <path>", "Caminho para arquivo com XML do dataset")
   .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
@@ -84,7 +102,7 @@ cli
 cli
   .command(
     "delete-record <dataServerName>",
-    "DataServer DeleteRecord (EXPERIMENTAL — escrita destrutiva)",
+    "DataServer DeleteRecord (escrita destrutiva)",
   )
   .option("--xml <content>", "XML do dataset (NewDataSet/Row) inline")
   .option("--xml-file <path>", "Caminho para arquivo com XML do dataset")
@@ -101,7 +119,7 @@ cli
 cli
   .command(
     "delete-record-by-key <dataServerName> <primaryKey>",
-    "DataServer DeleteRecordByKey (EXPERIMENTAL — escrita destrutiva)",
+    "DataServer DeleteRecordByKey (escrita destrutiva)",
   )
   .option(
     "--context <ctx>",

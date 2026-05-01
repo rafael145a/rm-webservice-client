@@ -12,8 +12,11 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 - WSDL-aware: lê o WSDL para descobrir endpoint, SOAPAction e operações
 - API tipada para `ReadView`, `ReadRecord`, `ReadLookupView`, `GetSchema`,
   `GetSchemaParsed`, `IsValidDataServer`, `SaveRecord`, `DeleteRecord`,
-  `DeleteRecordByKey` (escritas marcadas EXPERIMENTAL),
-  `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
+  `DeleteRecordByKey`, `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
+- **Builder** de XML: `saveRecord({ fields })` /
+  `dataServer.buildRecord(name, fields)` valida campos contra o schema
+  do DataServer e monta o `<NewDataSet>` automaticamente. Erros
+  client-side viram `RmValidationError` antes mesmo de chamar o RM
 - `parseMode: "result-strict"` em `saveRecord`/`deleteRecord*` detecta
   erros embutidos no Result e lança `RmResultError`
 - Basic Auth e Bearer Auth manual
@@ -23,7 +26,7 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 - Logger opcional com redaction automática de credenciais
 - Cache de WSDL em disco (opt-in na lib, ligado por padrão na CLI)
 - CLI `rmws` com subcomandos `inspect`, `read-view`, `read-lookup-view`,
-  `save-record`, `delete-record`, `delete-record-by-key`,
+  `build-record`, `save-record`, `delete-record`, `delete-record-by-key`,
   `generate-types`, `sql`, `diagnose` e `catalog`
 - Geração de tipos TypeScript a partir do `GetSchema` do RM
   (`rmws generate-types` ou `generateTypes(parseXsdSchema(xsd))`)
@@ -171,13 +174,124 @@ const ok = await rm.dataServer.isValidDataServer({
 });
 ```
 
-### `saveRecord(opts): Promise<string>` — **EXPERIMENTAL (escrita)**
+### Builder de XML (0.6.0)
+
+A 0.6.0 adicionou um caminho de alto nível pra `SaveRecord` /
+`DeleteRecord` em cima do schema parseado: você passa `fields` tipados,
+a lib busca o schema (cacheado por DataServerName), valida campos
+contra ele e monta o `<NewDataSet>` automaticamente.
+
+```ts
+import { RmValidationError, RmResultError } from "rm-webservice-client";
+
+try {
+  const pk = await rm.dataServer.saveRecord({
+    dataServerName: "RhuPessoaData",
+    fields: {
+      CODIGO: -1, // -1 = autoincrement
+      NOME: "Fulano",
+      CEP: "00000-000",
+      DTNASCIMENTO: new Date("2000-01-01"),
+      ESTADO: "SP",
+      ESTADONATAL: "SP",
+      NATURALIDADE: "São Paulo",
+    },
+    parseMode: "result-strict",
+  });
+  console.log("PK gerado:", pk);
+} catch (err) {
+  if (err instanceof RmValidationError) {
+    // Erro CLIENT-SIDE: ainda nem chamou o RM
+    for (const issue of err.issues) {
+      console.error(`${issue.field}: ${issue.kind} (${issue.expected ?? ""} got ${issue.got ?? ""})`);
+    }
+  } else if (err instanceof RmResultError) {
+    // RM rejeitou por regra de negócio (FK, validador custom .NET)
+    console.error("RM rejeitou:", err.summary);
+  }
+  throw err;
+}
+```
+
+Coerção automática de tipos:
+
+| Valor passado | Comportamento |
+|---------------|---------------|
+| `Date` | Convertido pra ISO 8601 (`toISOString()`) |
+| `boolean` | `true → "1"`, `false → "0"` (convenção TOTVS) |
+| `number` | `String(n)` |
+| `null` | Emite `<Campo/>` (vazio explícito — usar pra resetar) |
+| `undefined` | Omite o elemento (campo não enviado) |
+
+Validação default-strict cobre 4 casos:
+
+- **`unknown`** — campo presente em `fields` mas não no schema
+- **`required`** — campo `minOccurs!="0"` ausente
+- **`type`** — valor não bate com `xsdType` (ex.: string num campo `xs:int`)
+- **`maxLength`** — string excedeu `xs:maxLength`
+
+> ⚠️ **O XSD mente em alguns casos.** Validações custom no `.NET`
+> (ex.: `RhuPessoaData` exige `CEP`/`ESTADONATAL` mesmo com
+> `minOccurs="0"`) **não** aparecem no schema. O builder passa esses
+> campos opcionais sem reclamar — se faltarem, o RM volta com
+> `RmResultError` quando você usa `parseMode: "result-strict"`.
+
+#### Standalone — só montar XML
+
+Pra inspecionar / colar em outra ferramenta, sem efeito de SaveRecord:
+
+```ts
+const xml = await rm.dataServer.buildRecord("RhuPessoaData", {
+  CODIGO: -1,
+  NOME: "X",
+});
+// xml === "<NewDataSet><PPessoa><CODIGO>-1</CODIGO><NOME>X</NOME></PPessoa></NewDataSet>"
+```
+
+Versão pura (sem fetch de schema, útil em build-time):
+
+```ts
+import { buildRecord, parseXsdSchema } from "rm-webservice-client";
+
+const schema = parseXsdSchema(await readFile("rhu-pessoa.xsd", "utf8"));
+const xml = buildRecord(schema, { CODIGO: -1, NOME: "X" });
+```
+
+#### Múltiplas rows de uma vez
+
+```ts
+await rm.dataServer.saveRecord({
+  dataServerName: "GlbUsuarioData",
+  fields: [
+    { CODUSUARIO: "u1", DATAINICIO: "2026-01-01T00:00:00", CODACESSO: "x", IGNORARAUTENTICACAOLDAP: "T" },
+    { CODUSUARIO: "u2", DATAINICIO: "2026-01-01T00:00:00", CODACESSO: "y", IGNORARAUTENTICACAOLDAP: "T" },
+  ],
+  parseMode: "result-strict",
+});
+```
+
+#### `validateRecord` standalone
+
+Pra validar fields antes de gravar (ex.: feedback em formulário):
+
+```ts
+import { validateRecord } from "rm-webservice-client";
+
+const issues = validateRecord(schema.rows[0]!, formValues);
+if (issues.length > 0) {
+  // mostra erros sem lançar
+}
+```
+
+### `saveRecord(opts): Promise<string>`
 
 > ⚠️ **Operação destrutiva.** Grava dados no RM. Sempre teste em
-> homologação antes de produção. A lib **não** monta o XML pra você —
-> você passa o `<NewDataSet>...</NewDataSet>` cru, igual ao que o RM
-> espera. Isso é deliberado: builders virão na `0.6.0` em cima do
-> `GetSchema` parseado (`0.5.0`), não antes.
+> homologação antes de produção.
+
+A partir da 0.6.0 você pode passar `fields` em vez de `xml` cru — a lib
+busca o schema, valida e monta o `<NewDataSet>` automaticamente (veja
+seção [Builder de XML](#builder-de-xml-060) acima). O modo cru continua
+suportado pra usos avançados / debug.
 
 ```ts
 const xml = `<NewDataSet>
@@ -238,7 +352,7 @@ SOAP Envelope completo.
 > explicitamente `logBody: true` — e mesmo aí senhas/tokens passam
 > pelo `redactString`. Não logue `saveRecord` em produção.
 
-### `deleteRecord(opts): Promise<string>` — **EXPERIMENTAL (escrita destrutiva)**
+### `deleteRecord(opts): Promise<string>` — **escrita destrutiva**
 
 > ⚠️ **Apaga registros do RM.** Use `parseMode: "result-strict"` para
 > que erros embutidos no Result virem `RmResultError` automaticamente.
@@ -259,7 +373,7 @@ ou regra de negócio, o RM volta com `HTTP 200 + texto de erro embutido`
 — exatamente o mesmo padrão de `saveRecord`. Por isso o
 `result-strict`.
 
-### `deleteRecordByKey(opts): Promise<string>` — **EXPERIMENTAL (escrita destrutiva)**
+### `deleteRecordByKey(opts): Promise<string>` — **escrita destrutiva**
 
 > ⚠️ Mesma destrutividade do `deleteRecord`, sem precisar montar XML.
 
@@ -469,13 +583,14 @@ Pontos práticos que você vai encontrar ao plugar contra um ambiente RM real
 
 ```ts
 import {
-  RmError,           // base
-  RmConfigError,     // WSDL ausente, port inválido, etc.
-  RmHttpError,       // status: number, responseText: string
-  RmSoapFaultError,  // faultCode, faultString, status?
-  RmParseError,      // operationName, resultElement
-  RmResultError,     // erro embutido em <...Result> (ver result-strict)
-  RmTimeoutError,    // timeoutMs
+  RmError,            // base
+  RmConfigError,      // WSDL ausente, port inválido, etc.
+  RmHttpError,        // status: number, responseText: string
+  RmSoapFaultError,   // faultCode, faultString, status?
+  RmParseError,       // operationName, resultElement
+  RmResultError,      // erro embutido em <...Result> (ver result-strict)
+  RmTimeoutError,     // timeoutMs
+  RmValidationError,  // builder client-side rejeitou os fields (issues[])
 } from "rm-webservice-client";
 ```
 
@@ -507,6 +622,21 @@ if (errorMatch) {
   // result é o PK gerado
 }
 ```
+
+`RmValidationError` (0.6.0) é client-side, antes de chamar o RM.
+Disparado pelo `buildRecord` / `saveRecord({ fields })` /
+`rmws build-record`. Expõe:
+
+```ts
+err.code      // "RM_VALIDATION_ERROR"
+err.target    // "DatasetName/RowName"
+err.issues    // ReadonlyArray<RmValidationIssue>
+              //   { field, kind: "unknown"|"required"|"type"|"maxLength",
+              //     expected?, got? }
+```
+
+A lista `issues` é **completa** (não para no primeiro problema), útil
+pra UIs que mostram tudo de uma vez.
 
 ## Logging
 
@@ -703,7 +833,7 @@ npx rmws sql EDU.ALUNOS.ATIVOS \
   --coligada 1 --sistema S \
   --params "CODFILIAL=1"
 
-# EXPERIMENTAL — escrita
+# Escrita
 npx rmws save-record GlbUsuarioData \
   --xml-file ./novo-usuario.xml \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre"
@@ -713,7 +843,14 @@ npx rmws generate-types RhuPessoaData \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
   --out src/rm-types/rhu-pessoa.ts
 
-# EXPERIMENTAL — escrita destrutiva
+# Builder de XML (0.6.0) — valida campos contra schema
+npx rmws build-record RhuPessoaData \
+  --fields-json '{"CODIGO": -1, "NOME": "X"}' \
+  --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
+  --out /tmp/payload.xml
+npx rmws save-record RhuPessoaData --xml-file /tmp/payload.xml --strict
+
+# Escrita destrutiva
 npx rmws delete-record-by-key RhuPessoaData 26620 \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
   --strict   # lança RmResultError se RM rejeitar (exit 6)
@@ -765,7 +902,7 @@ Flags do `sql`:
 | `--params <p>`      | Parâmetros (string ou `K=V;K=V`)                                |
 | `--context <ctx>`   | Contexto (usa `queryWithContext` quando presente)               |
 
-Flags do `save-record` (**EXPERIMENTAL — escrita**):
+Flags do `save-record` (**escrita**):
 
 | Flag                | Descrição                                                       |
 |---------------------|-----------------------------------------------------------------|
@@ -776,7 +913,7 @@ Flags do `save-record` (**EXPERIMENTAL — escrita**):
 `--xml` e `--xml-file` são mutuamente exclusivos; pelo menos um é
 obrigatório.
 
-Flags do `delete-record` (**EXPERIMENTAL — escrita destrutiva**):
+Flags do `delete-record` (**escrita destrutiva**):
 
 | Flag                | Descrição                                                       |
 |---------------------|-----------------------------------------------------------------|
@@ -785,7 +922,7 @@ Flags do `delete-record` (**EXPERIMENTAL — escrita destrutiva**):
 | `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
 | `--strict`          | Lança `RmResultError` se RM rejeitar (exit code 6)              |
 
-Flags do `delete-record-by-key` (**EXPERIMENTAL — escrita destrutiva**):
+Flags do `delete-record-by-key` (**escrita destrutiva**):
 
 A chave primária é argumento posicional (`<primaryKey>`). Para chave
 composta, use vírgula: `delete-record-by-key X 1,abc,42`.
@@ -794,6 +931,20 @@ composta, use vírgula: `delete-record-by-key X 1,abc,42`.
 |---------------------|-----------------------------------------------------------------|
 | `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
 | `--strict`          | Lança `RmResultError` se RM rejeitar (exit code 6)              |
+
+Flags do `build-record`:
+
+| Flag                      | Descrição                                                       |
+|---------------------------|-----------------------------------------------------------------|
+| `--fields-json <json>`    | Campos como JSON inline (`'{"CODIGO": -1, ...}'`)               |
+| `--fields-file <path>`    | Caminho para arquivo JSON com os campos                         |
+| `--row <name>`            | Nome da row do schema (default: master/primeira)                |
+| `--context <ctx>`         | Contexto (necessário pra alguns DataServers retornarem schema)  |
+| `--out <path>`            | Caminho do arquivo XML de destino (default: stdout)             |
+| `--bypass-validation`     | Pula validação (use com cuidado)                                |
+| `--allow-unknown`         | Aceita campos não declarados no schema                          |
+
+`--fields-json` e `--fields-file` são mutuamente exclusivos.
 
 Flags do `generate-types`:
 
@@ -845,6 +996,7 @@ Códigos de saída:
 | 4      | Erro de parse                                            |
 | 5      | Timeout                                                  |
 | 6      | `RmResultError` (RM rejeitou via `--strict`/result-strict) |
+| 7      | `RmValidationError` (builder client-side rejeitou fields)  |
 | 99     | Erro desconhecido                                        |
 
 ## Variáveis de ambiente (CLI)
@@ -877,11 +1029,38 @@ RM_WSDL_CACHE_DIR=/tmp/rmws      # opcional, diretório custom
 - Bearer tokens estáticos vencem — prefira `getToken: async () => ...`
   para sistemas de produção
 
-## Operações fora desta release
+## Versionamento
 
-- Builder de XML para gravação (`buildRecord`) em cima do schema parseado
-  (`0.6.0`)
-- `AutenticaAcesso` automático com cache de token
+A partir da `1.0.0` esta lib segue [SemVer estrito](https://semver.org/lang/pt-BR/):
+
+- **`MAJOR` (X.0.0)** — quebra de API pública. Migration guide acompanha.
+- **`MINOR` (1.X.0)** — features novas, backward-compatible.
+- **`PATCH` (1.0.X)** — bugfixes, sem mudança de API.
+
+A "API pública" inclui:
+
+- Tudo exportado pela entry principal `rm-webservice-client`
+- Tudo exportado pelo subpath `rm-webservice-client/catalog`
+- Comandos / flags da CLI `rmws`
+- Códigos de saída da CLI
+- Variáveis de ambiente `RM_*`
+
+O arquivo `test/api-surface.test.ts` trava esses símbolos em compile-time:
+PRs que removerem ou mudarem shape de algum export quebram o
+`npm run typecheck`. Adições não-breaking entram pelo mesmo arquivo.
+
+Detalhes internos (módulos `src/soap/`, `src/wsdl/internals/`, layout
+do WSDL cache) **não** são públicos e podem mudar em minor.
+
+Histórico completo em [`CHANGELOG.md`](./CHANGELOG.md).
+
+## Roadmap pós-1.0
+
+- `AutenticaAcesso` automático com cache de token (renovação) — `1.1.x`
+- Validação contra constraints do XSD além de tipos primitivos
+  (`xs:enumeration`, `xs:pattern`) — `1.x.x`
+- Builder com tipos cruzados com `generate-types` — TS infere os
+  fields aceitos pelo nome do DataServer — `1.x.x`
 
 ## Licença
 
