@@ -12,8 +12,7 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 - WSDL-aware: lê o WSDL para descobrir endpoint, SOAPAction e operações
 - API tipada para `ReadView`, `ReadRecord`, `ReadLookupView`, `GetSchema`,
   `GetSchemaParsed`, `IsValidDataServer`, `SaveRecord`, `DeleteRecord`,
-  `DeleteRecordByKey` (escritas marcadas EXPERIMENTAL),
-  `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
+  `DeleteRecordByKey`, `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
 - **Builder** de XML: `saveRecord({ fields })` /
   `dataServer.buildRecord(name, fields)` valida campos contra o schema
   do DataServer e monta o `<NewDataSet>` automaticamente. Erros
@@ -284,13 +283,15 @@ if (issues.length > 0) {
 }
 ```
 
-### `saveRecord(opts): Promise<string>` — **EXPERIMENTAL (escrita)**
+### `saveRecord(opts): Promise<string>`
 
 > ⚠️ **Operação destrutiva.** Grava dados no RM. Sempre teste em
-> homologação antes de produção. A lib **não** monta o XML pra você —
-> você passa o `<NewDataSet>...</NewDataSet>` cru, igual ao que o RM
-> espera. Isso é deliberado: builders virão na `0.6.0` em cima do
-> `GetSchema` parseado (`0.5.0`), não antes.
+> homologação antes de produção.
+
+A partir da 0.6.0 você pode passar `fields` em vez de `xml` cru — a lib
+busca o schema, valida e monta o `<NewDataSet>` automaticamente (veja
+seção [Builder de XML](#builder-de-xml-060) acima). O modo cru continua
+suportado pra usos avançados / debug.
 
 ```ts
 const xml = `<NewDataSet>
@@ -351,7 +352,7 @@ SOAP Envelope completo.
 > explicitamente `logBody: true` — e mesmo aí senhas/tokens passam
 > pelo `redactString`. Não logue `saveRecord` em produção.
 
-### `deleteRecord(opts): Promise<string>` — **EXPERIMENTAL (escrita destrutiva)**
+### `deleteRecord(opts): Promise<string>` — **escrita destrutiva**
 
 > ⚠️ **Apaga registros do RM.** Use `parseMode: "result-strict"` para
 > que erros embutidos no Result virem `RmResultError` automaticamente.
@@ -372,7 +373,7 @@ ou regra de negócio, o RM volta com `HTTP 200 + texto de erro embutido`
 — exatamente o mesmo padrão de `saveRecord`. Por isso o
 `result-strict`.
 
-### `deleteRecordByKey(opts): Promise<string>` — **EXPERIMENTAL (escrita destrutiva)**
+### `deleteRecordByKey(opts): Promise<string>` — **escrita destrutiva**
 
 > ⚠️ Mesma destrutividade do `deleteRecord`, sem precisar montar XML.
 
@@ -832,7 +833,7 @@ npx rmws sql EDU.ALUNOS.ATIVOS \
   --coligada 1 --sistema S \
   --params "CODFILIAL=1"
 
-# EXPERIMENTAL — escrita
+# Escrita
 npx rmws save-record GlbUsuarioData \
   --xml-file ./novo-usuario.xml \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre"
@@ -849,7 +850,7 @@ npx rmws build-record RhuPessoaData \
   --out /tmp/payload.xml
 npx rmws save-record RhuPessoaData --xml-file /tmp/payload.xml --strict
 
-# EXPERIMENTAL — escrita destrutiva
+# Escrita destrutiva
 npx rmws delete-record-by-key RhuPessoaData 26620 \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
   --strict   # lança RmResultError se RM rejeitar (exit 6)
@@ -901,7 +902,7 @@ Flags do `sql`:
 | `--params <p>`      | Parâmetros (string ou `K=V;K=V`)                                |
 | `--context <ctx>`   | Contexto (usa `queryWithContext` quando presente)               |
 
-Flags do `save-record` (**EXPERIMENTAL — escrita**):
+Flags do `save-record` (**escrita**):
 
 | Flag                | Descrição                                                       |
 |---------------------|-----------------------------------------------------------------|
@@ -912,7 +913,7 @@ Flags do `save-record` (**EXPERIMENTAL — escrita**):
 `--xml` e `--xml-file` são mutuamente exclusivos; pelo menos um é
 obrigatório.
 
-Flags do `delete-record` (**EXPERIMENTAL — escrita destrutiva**):
+Flags do `delete-record` (**escrita destrutiva**):
 
 | Flag                | Descrição                                                       |
 |---------------------|-----------------------------------------------------------------|
@@ -921,7 +922,7 @@ Flags do `delete-record` (**EXPERIMENTAL — escrita destrutiva**):
 | `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
 | `--strict`          | Lança `RmResultError` se RM rejeitar (exit code 6)              |
 
-Flags do `delete-record-by-key` (**EXPERIMENTAL — escrita destrutiva**):
+Flags do `delete-record-by-key` (**escrita destrutiva**):
 
 A chave primária é argumento posicional (`<primaryKey>`). Para chave
 composta, use vírgula: `delete-record-by-key X 1,abc,42`.
@@ -1028,13 +1029,38 @@ RM_WSDL_CACHE_DIR=/tmp/rmws      # opcional, diretório custom
 - Bearer tokens estáticos vencem — prefira `getToken: async () => ...`
   para sistemas de produção
 
-## Operações fora desta release
+## Versionamento
 
-- `AutenticaAcesso` automático com cache de token (renovação)
+A partir da `1.0.0` esta lib segue [SemVer estrito](https://semver.org/lang/pt-BR/):
+
+- **`MAJOR` (X.0.0)** — quebra de API pública. Migration guide acompanha.
+- **`MINOR` (1.X.0)** — features novas, backward-compatible.
+- **`PATCH` (1.0.X)** — bugfixes, sem mudança de API.
+
+A "API pública" inclui:
+
+- Tudo exportado pela entry principal `rm-webservice-client`
+- Tudo exportado pelo subpath `rm-webservice-client/catalog`
+- Comandos / flags da CLI `rmws`
+- Códigos de saída da CLI
+- Variáveis de ambiente `RM_*`
+
+O arquivo `test/api-surface.test.ts` trava esses símbolos em compile-time:
+PRs que removerem ou mudarem shape de algum export quebram o
+`npm run typecheck`. Adições não-breaking entram pelo mesmo arquivo.
+
+Detalhes internos (módulos `src/soap/`, `src/wsdl/internals/`, layout
+do WSDL cache) **não** são públicos e podem mudar em minor.
+
+Histórico completo em [`CHANGELOG.md`](./CHANGELOG.md).
+
+## Roadmap pós-1.0
+
+- `AutenticaAcesso` automático com cache de token (renovação) — `1.1.x`
 - Validação contra constraints do XSD além de tipos primitivos
-  (`xs:enumeration`, `xs:pattern`)
-- Builder com tipos gerados (cross-ref com `generate-types`) — TS infere
-  os fields aceitos pelo nome do DataServer
+  (`xs:enumeration`, `xs:pattern`) — `1.x.x`
+- Builder com tipos cruzados com `generate-types` — TS infere os
+  fields aceitos pelo nome do DataServer — `1.x.x`
 
 ## Licença
 
