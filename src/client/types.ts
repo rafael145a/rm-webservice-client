@@ -1,6 +1,7 @@
 import type { RmAuth } from "../auth/auth-types.js";
 import type { KnownDataServerName } from "../catalog/known-names.js";
 import type { RmLogger } from "../logging/types.js";
+import type { RmDataServerSchema } from "../schema/types.js";
 import type { RmContext, RmParameters, Separator } from "../rm/types.js";
 import type { WsdlCacheOptions } from "../wsdl/wsdl-cache.js";
 
@@ -125,6 +126,13 @@ export interface DataServerClient {
   readRecord(options: ReadRecordOptions & { parseMode: "raw" }): Promise<string>;
 
   getSchema(options: GetSchemaOptions): Promise<string>;
+
+  /**
+   * Retorna o schema do DataServer já parseado em estrutura tipada
+   * ({@link RmDataServerSchema}). Conveniência: equivale a
+   * `parseXsdSchema(await getSchema(opts))`.
+   */
+  getSchemaParsed(options: GetSchemaOptions): Promise<RmDataServerSchema>;
 
   isValidDataServer(options: IsValidDataServerOptions): Promise<boolean>;
 

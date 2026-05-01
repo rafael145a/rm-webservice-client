@@ -11,9 +11,9 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 
 - WSDL-aware: lê o WSDL para descobrir endpoint, SOAPAction e operações
 - API tipada para `ReadView`, `ReadRecord`, `ReadLookupView`, `GetSchema`,
-  `IsValidDataServer`, `SaveRecord`, `DeleteRecord`, `DeleteRecordByKey`
-  (escritas marcadas EXPERIMENTAL), `RealizarConsultaSQL`,
-  `RealizarConsultaSQLContexto`
+  `GetSchemaParsed`, `IsValidDataServer`, `SaveRecord`, `DeleteRecord`,
+  `DeleteRecordByKey` (escritas marcadas EXPERIMENTAL),
+  `RealizarConsultaSQL`, `RealizarConsultaSQLContexto`
 - `parseMode: "result-strict"` em `saveRecord`/`deleteRecord*` detecta
   erros embutidos no Result e lança `RmResultError`
 - Basic Auth e Bearer Auth manual
@@ -23,8 +23,10 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 - Logger opcional com redaction automática de credenciais
 - Cache de WSDL em disco (opt-in na lib, ligado por padrão na CLI)
 - CLI `rmws` com subcomandos `inspect`, `read-view`, `read-lookup-view`,
-  `save-record`, `delete-record`, `delete-record-by-key`, `sql`,
-  `diagnose` e `catalog`
+  `save-record`, `delete-record`, `delete-record-by-key`,
+  `generate-types`, `sql`, `diagnose` e `catalog`
+- Geração de tipos TypeScript a partir do `GetSchema` do RM
+  (`rmws generate-types` ou `generateTypes(parseXsdSchema(xsd))`)
 - Catálogo embutido com 2.537 DataServers do RM (todos os módulos), opt-in via
   `import "rm-webservice-client/catalog"`
 - Sem dependências SOAP pesadas — apenas `fast-xml-parser` e `cac`
@@ -126,6 +128,34 @@ const u = await rm.dataServer.readRecord<Usuario>({
 ```
 
 Retorna `null` quando o RM devolve `<NewDataSet/>` vazio.
+
+### `getSchemaParsed(opts): Promise<RmDataServerSchema>`
+
+Conveniência que retorna o XSD do `getSchema` já parseado em estrutura
+tipada — pronto pro `generateTypes` ou pra introspecção runtime
+(builder na 0.6.0):
+
+```ts
+const schema = await rm.dataServer.getSchemaParsed({
+  dataServerName: "RhuPessoaData",
+  context: { CODCOLIGADA: 1, CODSISTEMA: "G", CODUSUARIO: "mestre" },
+});
+
+// schema.datasetName: "RhuPessoa"
+// schema.rows: [{ name: "PPessoa", fields: [...] }, ...]
+
+for (const row of schema.rows) {
+  for (const field of row.fields) {
+    console.log(field.name, field.tsType, field.optional ? "?" : "!");
+  }
+}
+```
+
+> ⚠️ **O XSD mente em alguns casos.** Validações custom no `.NET`
+> (ex.: `RhuPessoaData` exige `CEP`/`DTNASCIMENTO`/`ESTADONATAL` mesmo
+> com `minOccurs="0"`) **não** aparecem no schema. Use o resultado
+> como guia de DX, não como contrato — a verdade definitiva é o
+> próprio `saveRecord` em `parseMode: "result-strict"`.
 
 ### `getSchema(opts): Promise<string>`
 
@@ -260,6 +290,44 @@ const opcoes = await rm.dataServer.readLookupView<{
 derivam o lookup de outro contexto. A maioria não precisa desse campo.
 `parseMode: "raw" | "dataset" | "records"` (default `records`), igual
 a `readView`.
+
+## Geração de tipos TypeScript
+
+A partir de 0.5.0 a lib pode gerar interfaces TS a partir do schema do
+DataServer — útil pra autocompletar campos no consumo de `readView`,
+`readRecord`, `saveRecord`:
+
+```ts
+import {
+  parseXsdSchema,
+  generateTypes,
+} from "rm-webservice-client";
+
+const xsd = await rm.dataServer.getSchema({ dataServerName: "RhuPessoaData" });
+const schema = parseXsdSchema(xsd);
+const ts = generateTypes(schema, { banner: "Gerado em 2026-05-01" });
+// ts é um string com `export interface PPessoa { ... }` etc.
+```
+
+Equivalente na CLI:
+
+```bash
+npx rmws generate-types RhuPessoaData \
+  --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
+  --out src/rm-types/rhu-pessoa.ts
+```
+
+A saída inclui:
+
+- Uma `interface` por row (`PPessoa`, `VRECRUTAMENTO`, etc.)
+- Uma interface agregadora com nome do dataset (`RhuPessoa`) — rows
+  como propriedades opcionais arrayificadas
+- JSDoc com `Caption` (legível em PT-BR), `@xsdType`, `@maxLength`,
+  `@default` quando declarados
+- `?` em campos `minOccurs="0"`
+
+> ⚠️ Tipos gerados são **auxiliares**, não fonte de verdade. Veja
+> `getSchemaParsed` acima — XSD não captura validações custom do RM.
 
 ## ConsultaSQL
 
@@ -640,6 +708,11 @@ npx rmws save-record GlbUsuarioData \
   --xml-file ./novo-usuario.xml \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre"
 
+# Geração de tipos
+npx rmws generate-types RhuPessoaData \
+  --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
+  --out src/rm-types/rhu-pessoa.ts
+
 # EXPERIMENTAL — escrita destrutiva
 npx rmws delete-record-by-key RhuPessoaData 26620 \
   --context "CODCOLIGADA=1;CODSISTEMA=G;CODUSUARIO=mestre" \
@@ -722,6 +795,13 @@ composta, use vírgula: `delete-record-by-key X 1,abc,42`.
 | `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
 | `--strict`          | Lança `RmResultError` se RM rejeitar (exit code 6)              |
 
+Flags do `generate-types`:
+
+| Flag                | Descrição                                                       |
+|---------------------|-----------------------------------------------------------------|
+| `--out <path>`      | Caminho do arquivo `.ts` de destino (default: stdout)           |
+| `--context <ctx>`   | Contexto (string ou `K=V;K=V`)                                  |
+
 Flags do `read-lookup-view`:
 
 | Flag                | Descrição                                                       |
@@ -799,7 +879,6 @@ RM_WSDL_CACHE_DIR=/tmp/rmws      # opcional, diretório custom
 
 ## Operações fora desta release
 
-- `rmws generate-types` a partir de `GetSchema` (`0.5.0`)
 - Builder de XML para gravação (`buildRecord`) em cima do schema parseado
   (`0.6.0`)
 - `AutenticaAcesso` automático com cache de token

@@ -1,4 +1,4 @@
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 
 export { createRmClient } from "./client/create-rm-client.js";
 export type {
@@ -49,6 +49,16 @@ export {
   detectRmResultError,
 } from "./rm/detect-result-error.js";
 export type { DetectResultErrorMatch } from "./rm/detect-result-error.js";
+
+export { parseXsdSchema } from "./schema/parse-xsd.js";
+export { generateTypes } from "./schema/generate-types.js";
+export type { GenerateTypesOptions } from "./schema/generate-types.js";
+export type {
+  RmDataServerSchema,
+  RmFieldSchema,
+  RmFieldTsType,
+  RmRowSchema,
+} from "./schema/types.js";
 
 export {
   NOOP_LOGGER,
