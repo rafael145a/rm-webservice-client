@@ -21,6 +21,9 @@ cli.option("--raw", "Retorna XML cru em vez de JSON");
 cli.option("--quiet", "Suprime mensagens diagnósticas em stderr");
 cli.option("--log-level <level>", "Nível de log em stderr (debug | info | warn | error)");
 cli.option("--log-body", "Inclui body SOAP redigido nos logs (requer --log-level debug)");
+cli.option("--no-wsdl-cache", "Desliga o cache em disco do WSDL (default: ligado na CLI)");
+cli.option("--wsdl-cache-ttl <ms>", "TTL do cache de WSDL em ms (default: 24h)");
+cli.option("--wsdl-cache-dir <path>", "Diretório do cache de WSDL (default: ~/.cache/rm-webservice-client)");
 
 cli
   .command("inspect <service>", "Inspeciona WSDL (service: dataserver | sql)")

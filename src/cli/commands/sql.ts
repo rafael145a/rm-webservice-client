@@ -31,6 +31,7 @@ export async function sqlCommand(
     timeoutMs: cfg.timeoutMs,
     ...(cfg.logger ? { logger: cfg.logger } : {}),
     ...(cfg.logBody !== undefined ? { logBody: cfg.logBody } : {}),
+    ...(cfg.wsdlCache ? { wsdlCache: cfg.wsdlCache } : {}),
   });
 
   const baseOpts = {

@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { resolveCliConfig } from "../../src/cli/load-config.js";
+import {
+  resolveCliConfig,
+  resolveWsdlCacheFromFlags,
+} from "../../src/cli/load-config.js";
 import { RmConfigError } from "../../src/errors/index.js";
 
 describe("resolveCliConfig", () => {
@@ -66,5 +69,63 @@ describe("resolveCliConfig", () => {
       { RM_DATASERVER_WSDL: "x", RM_USER: "u", RM_PASSWORD: "p" },
     );
     expect(cfg.timeoutMs).toBeUndefined();
+  });
+
+  it("liga wsdlCache por padrão na CLI", () => {
+    const cfg = resolveCliConfig({}, "dataServer", {
+      RM_DATASERVER_WSDL: "x",
+      RM_USER: "u",
+      RM_PASSWORD: "p",
+    });
+    expect(cfg.wsdlCache).toEqual({ enabled: true });
+  });
+
+  it("--no-wsdl-cache desliga (flag wsdlCache=false)", () => {
+    const cfg = resolveCliConfig(
+      { wsdlCache: false },
+      "dataServer",
+      { RM_DATASERVER_WSDL: "x", RM_USER: "u", RM_PASSWORD: "p" },
+    );
+    expect(cfg.wsdlCache).toBeUndefined();
+  });
+
+  it("RM_WSDL_CACHE=0 desliga via env", () => {
+    const cfg = resolveCliConfig({}, "dataServer", {
+      RM_DATASERVER_WSDL: "x",
+      RM_USER: "u",
+      RM_PASSWORD: "p",
+      RM_WSDL_CACHE: "0",
+    });
+    expect(cfg.wsdlCache).toBeUndefined();
+  });
+});
+
+describe("resolveWsdlCacheFromFlags", () => {
+  it("retorna { enabled: true } sem overrides quando nada é passado", () => {
+    expect(resolveWsdlCacheFromFlags({}, {})).toEqual({ enabled: true });
+  });
+
+  it("aplica TTL e dir vindos das flags", () => {
+    const cache = resolveWsdlCacheFromFlags(
+      { wsdlCacheTtl: "5000", wsdlCacheDir: "/tmp/c" },
+      {},
+    );
+    expect(cache).toEqual({ enabled: true, ttlMs: 5000, dir: "/tmp/c" });
+  });
+
+  it("aplica TTL e dir vindos do env", () => {
+    const cache = resolveWsdlCacheFromFlags(
+      {},
+      { RM_WSDL_CACHE_TTL_MS: "1000", RM_WSDL_CACHE_DIR: "/var/c" },
+    );
+    expect(cache).toEqual({ enabled: true, ttlMs: 1000, dir: "/var/c" });
+  });
+
+  it("flag tem precedência sobre env", () => {
+    const cache = resolveWsdlCacheFromFlags(
+      { wsdlCacheTtl: "9000" },
+      { RM_WSDL_CACHE_TTL_MS: "1000" },
+    );
+    expect(cache).toEqual({ enabled: true, ttlMs: 9000 });
   });
 });

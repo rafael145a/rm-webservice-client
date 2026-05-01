@@ -1,6 +1,6 @@
 import { Writable } from "node:stream";
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { createConsoleLogger } from "../../src/logging/console-logger.js";
 
@@ -56,5 +56,28 @@ describe("createConsoleLogger", () => {
 
     expect(lines()).toHaveLength(1);
     expect(JSON.parse(lines()[0] as string).event).toBe("i");
+  });
+
+  it("usa process.stderr quando stream não é fornecido", () => {
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const logger = createConsoleLogger();
+      logger.error("evt");
+      expect(stderrSpy).toHaveBeenCalledTimes(1);
+      const written = stderrSpy.mock.calls[0]?.[0] as string;
+      expect(JSON.parse(written.trim()).event).toBe("evt");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("usa Date() quando 'now' não é fornecido", () => {
+    const { stream, lines } = captureStream();
+    const logger = createConsoleLogger({ stream, level: "debug" });
+    logger.debug("evt");
+    const ts = JSON.parse(lines()[0] as string).ts as string;
+    expect(() => new Date(ts).toISOString()).not.toThrow();
   });
 });

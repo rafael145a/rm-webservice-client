@@ -4,7 +4,7 @@ import { RmConfigError } from "../../errors/rm-config-error.js";
 import { loadWsdl } from "../../wsdl/load-wsdl.js";
 import { resolveWsdlService } from "../../wsdl/resolve-wsdl-service.js";
 
-import type { CliGlobalFlags } from "../load-config.js";
+import { resolveWsdlCacheFromFlags, type CliGlobalFlags } from "../load-config.js";
 
 const PORTS_BY_SERVICE: Record<string, string> = {
   dataserver: "RM_IwsDataServer",
@@ -34,7 +34,8 @@ export async function inspectCommand(
     );
   }
 
-  const wsdlXml = await fetchWsdl(wsdlSource);
+  const wsdlCache = resolveWsdlCacheFromFlags(flags, env);
+  const wsdlXml = await fetchWsdl(wsdlSource, wsdlCache);
   const resolved = resolveWsdlService({ wsdlXml, expectedPortName: portName });
 
   return JSON.stringify(
@@ -51,9 +52,12 @@ export async function inspectCommand(
   );
 }
 
-async function fetchWsdl(source: string): Promise<string> {
+async function fetchWsdl(
+  source: string,
+  cache: ReturnType<typeof resolveWsdlCacheFromFlags>,
+): Promise<string> {
   if (/^https?:\/\//i.test(source)) {
-    return loadWsdl({ wsdlUrl: source });
+    return loadWsdl({ wsdlUrl: source, ...(cache ? { cache } : {}) });
   }
   return readFile(source, "utf8");
 }

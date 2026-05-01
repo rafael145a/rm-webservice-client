@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 import { createRmClient } from "../../src/client/create-rm-client.js";
+import { RmSoapFaultError } from "../../src/errors/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dataServerWsdl = readFileSync(
@@ -170,6 +171,56 @@ describe("DiagnosticsClient.checkConsultaSql", () => {
     expect(report.ok).toBe(false);
     expect(report.steps[0]?.error?.code).toBe("RM_CONFIG_ERROR");
   });
+
+  it("ok=false e para no resolve-wsdl quando WSDL é inválido", async () => {
+    const rm = createRmClient({
+      services: { consultaSql: { wsdlXml: "<not-wsdl/>" } },
+      auth: baseAuth,
+    });
+    const report = await rm.diagnostics.checkConsultaSql({
+      probe: { codSentenca: "X", codColigada: 1, codSistema: "S" },
+    });
+    expect(report.ok).toBe(false);
+    expect(report.steps).toHaveLength(1);
+    expect(report.steps[0]?.name).toBe("resolve-wsdl");
+    expect(report.steps[0]?.ok).toBe(false);
+  });
+});
+
+describe("DiagnosticsClient.checkDataServer — resolve-wsdl falha", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("ok=false e para no resolve-wsdl quando WSDL é inválido", async () => {
+    const rm = createRmClient({
+      services: { dataServer: { wsdlXml: "<not-wsdl/>" } },
+      auth: baseAuth,
+    });
+    const report = await rm.diagnostics.checkDataServer();
+    expect(report.ok).toBe(false);
+    expect(report.steps).toHaveLength(1);
+    expect(report.steps[0]?.name).toBe("resolve-wsdl");
+    expect(report.steps[0]?.ok).toBe(false);
+  });
+
+  it("toStepError omite campos opcionais ausentes em RmSoapFaultError", async () => {
+    const rm = createRmClient({
+      services: { dataServer: { wsdlXml: dataServerWsdl } },
+      auth: baseAuth,
+    });
+    rm.dataServer.isValidDataServer = async () => {
+      throw new RmSoapFaultError("falha sintética sem campos opcionais");
+    };
+
+    const report = await rm.diagnostics.checkDataServer();
+    const probeStep = report.steps.find((s) => s.name === "is-valid-data-server");
+    expect(probeStep?.error?.code).toBe("RM_SOAP_FAULT");
+    expect(probeStep?.error?.message).toContain("falha sintética");
+    expect(probeStep?.error?.status).toBeUndefined();
+    expect(probeStep?.error?.faultCode).toBeUndefined();
+    expect(probeStep?.error?.faultString).toBeUndefined();
+  });
 });
 
 describe("DiagnosticsClient.authenticate", () => {
@@ -258,5 +309,42 @@ describe("DiagnosticsClient.authenticate", () => {
     const report = await rm.diagnostics.authenticate();
     expect(report.ok).toBe(false);
     expect(report.steps[0]?.error?.code).toBe("RM_CONFIG_ERROR");
+  });
+
+  it("encapsula Error nativo (não-RmError) como UNKNOWN", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("falha de rede genérica")),
+    );
+
+    const rm = createRmClient({
+      services: { dataServer: { wsdlXml: dataServerWsdl } },
+      auth: baseAuth,
+    });
+
+    const report = await rm.diagnostics.checkDataServer();
+    const probeStep = report.steps.find((s) => s.name === "is-valid-data-server");
+    expect(probeStep?.ok).toBe(false);
+    expect(probeStep?.error?.code).toBe("UNKNOWN");
+    expect(probeStep?.error?.message).toContain("falha de rede genérica");
+  });
+
+  it("encapsula valor não-Error lançado como UNKNOWN", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        throw "string crua";
+      }),
+    );
+
+    const rm = createRmClient({
+      services: { dataServer: { wsdlXml: dataServerWsdl } },
+      auth: baseAuth,
+    });
+
+    const report = await rm.diagnostics.checkDataServer();
+    const probeStep = report.steps.find((s) => s.name === "is-valid-data-server");
+    expect(probeStep?.error?.code).toBe("UNKNOWN");
+    expect(probeStep?.error?.message).toBe("string crua");
   });
 });

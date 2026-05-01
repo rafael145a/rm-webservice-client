@@ -1,4 +1,4 @@
-export const VERSION = "0.2.0";
+export const VERSION = "0.2.1";
 
 export { createRmClient } from "./client/create-rm-client.js";
 export type {
@@ -27,7 +27,8 @@ export type { RmAuth } from "./auth/auth-types.js";
 export type { RmContext, RmParameters, RmPrimitive, Separator } from "./rm/types.js";
 
 export type { ResolvedSoapOperation, ResolvedSoapService } from "./wsdl/wsdl-types.js";
-export { loadWsdl, resolveWsdlService } from "./wsdl/index.js";
+export { defaultCacheDir, loadWsdl, resolveWsdlService } from "./wsdl/index.js";
+export type { WsdlCacheOptions } from "./wsdl/index.js";
 
 export {
   RmError,

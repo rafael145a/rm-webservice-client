@@ -22,6 +22,7 @@ export async function readViewCommand(
     timeoutMs: cfg.timeoutMs,
     ...(cfg.logger ? { logger: cfg.logger } : {}),
     ...(cfg.logBody !== undefined ? { logBody: cfg.logBody } : {}),
+    ...(cfg.wsdlCache ? { wsdlCache: cfg.wsdlCache } : {}),
   });
 
   if (cfg.raw) {

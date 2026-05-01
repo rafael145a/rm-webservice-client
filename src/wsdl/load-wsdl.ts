@@ -2,19 +2,33 @@ import { RmConfigError } from "../errors/index.js";
 import { RmTimeoutError } from "../errors/rm-timeout-error.js";
 import { NOOP_LOGGER } from "../logging/no-op-logger.js";
 
+import {
+  readCachedWsdl,
+  resolveCacheConfig,
+  writeCachedWsdl,
+} from "./wsdl-cache.js";
+
 import type { RmLogger } from "../logging/types.js";
+import type { WsdlCacheOptions } from "./wsdl-cache.js";
 
 export interface LoadWsdlOptions {
   wsdlUrl?: string;
   wsdlXml?: string;
   timeoutMs?: number;
   logger?: RmLogger;
+  cache?: WsdlCacheOptions;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 export async function loadWsdl(options: LoadWsdlOptions): Promise<string> {
-  const { wsdlUrl, wsdlXml, timeoutMs = DEFAULT_TIMEOUT_MS, logger = NOOP_LOGGER } = options;
+  const {
+    wsdlUrl,
+    wsdlXml,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    logger = NOOP_LOGGER,
+    cache,
+  } = options;
 
   if (!wsdlUrl && !wsdlXml) {
     throw new RmConfigError("loadWsdl exige wsdlUrl ou wsdlXml.");
@@ -28,6 +42,13 @@ export async function loadWsdl(options: LoadWsdlOptions): Promise<string> {
   }
 
   const url = wsdlUrl as string;
+  const cacheConfig = cache?.enabled ? resolveCacheConfig(cache) : null;
+
+  if (cacheConfig) {
+    const cached = await readCachedWsdl(url, cacheConfig, logger);
+    if (cached) return cached;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const startedAt = Date.now();
@@ -68,6 +89,9 @@ export async function loadWsdl(options: LoadWsdlOptions): Promise<string> {
       bytes: text.length,
       durationMs: Date.now() - startedAt,
     });
+    if (cacheConfig) {
+      await writeCachedWsdl(url, text, cacheConfig, logger);
+    }
     return text;
   } catch (err) {
     if ((err as { name?: string }).name === "AbortError") {
@@ -88,6 +112,7 @@ export async function loadWsdl(options: LoadWsdlOptions): Promise<string> {
       durationMs: Date.now() - startedAt,
     });
     throw wrapped;
+    /* v8 ignore next 3 — finally tem branch sintético do v8 sem caminho lógico distinto */
   } finally {
     clearTimeout(timer);
   }

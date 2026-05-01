@@ -4,7 +4,11 @@ import { createRmClient } from "../../client/create-rm-client.js";
 import { RmConfigError } from "../../errors/rm-config-error.js";
 
 import { exitCodeForCode } from "../exit-codes.js";
-import { buildLoggerFromFlags, type CliGlobalFlags } from "../load-config.js";
+import {
+  buildLoggerFromFlags,
+  resolveWsdlCacheFromFlags,
+  type CliGlobalFlags,
+} from "../load-config.js";
 
 import type { RmAuth } from "../../auth/auth-types.js";
 import type {
@@ -51,12 +55,14 @@ export async function diagnoseCommand(
   ensureRequiredServicesForTarget(normalizedTarget, services);
 
   const logger = buildLoggerFromFlags(flags, env);
+  const wsdlCache = resolveWsdlCacheFromFlags(flags, env);
   const rm = createRmClient({
     services,
     auth,
     timeoutMs: parseTimeout(flags.timeout ?? env.RM_TIMEOUT_MS),
     ...(logger ? { logger } : {}),
     ...(flags.logBody ? { logBody: true } : {}),
+    ...(wsdlCache ? { wsdlCache } : {}),
   });
 
   const reports: DiagnosticReport[] = [];

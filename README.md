@@ -17,6 +17,7 @@ XML, contexto, parâmetros, CDATA e parsing de DataSets.
 - Hierarquia de erros tipados (HTTP, SOAP Fault, parse, config, timeout)
 - `rm.diagnostics.*` — checagens estruturadas (WSDL, auth, smoke query)
 - Logger opcional com redaction automática de credenciais
+- Cache de WSDL em disco (opt-in na lib, ligado por padrão na CLI)
 - CLI `rmws` com subcomandos `inspect`, `read-view`, `sql` e `diagnose`
 - Sem dependências SOAP pesadas — apenas `fast-xml-parser` e `cac`
 - Funciona com `fetch` nativo do Node 18+
@@ -101,6 +102,11 @@ const usuarios = await rm.dataServer.readView<Usuario>({
 
 Sempre retorna array (`[]` quando vazio). Tipagem genérica é apenas hint —
 o RM retorna strings, não há coerção automática.
+
+> **Filtro costuma ser obrigatório.** Vários DataServers do RM lançam
+> `RM_SOAP_FAULT: Erro ao executar readview Filtro invalido` quando `filter`
+> é omitido. Em caso de dúvida, mande sempre um filtro mínimo
+> (ex.: `"CODCOLIGADA = 1"`).
 
 ### `readRecord<T>(opts): Promise<T | null>`
 
@@ -218,6 +224,38 @@ Todos os métodos que retornam dados aceitam:
 
 `raw` é o escape hatch para quando o RM devolver algo inesperado.
 
+## Comportamentos do TOTVS RM observados em produção
+
+Pontos práticos que você vai encontrar ao plugar contra um ambiente RM real
+(testado contra um RM CloudTOTVS 12.x):
+
+- **Filtro obrigatório em ReadView.** Vários DataServers (ex.: `GlbUsuarioData`)
+  recusam chamadas sem `filter` com `Erro ao executar readview Filtro invalido`.
+  Mande pelo menos algo como `"CODCOLIGADA = 1"`.
+- **`NewDataSet` pode trazer múltiplas Views irmãs.** Um único `ReadView` pode
+  devolver mais de um tipo de Row dentro do mesmo `NewDataSet` (ex.:
+  `<GUSUARIO/>` + `<GAVATAR/>`). `parseRmDataset` retorna apenas a **primeira**
+  View encontrada — quando você precisa das outras, use
+  `parseMode: "dataset"` para receber o XML interno e parsear manualmente.
+- **Whitespace vira campo `#text` no Row.** O RM costuma intercalar `&#xD;`
+  entre os elementos de cada Row. O `fast-xml-parser` preserva isso como
+  `"#text": "\r\r\r..."`. É inofensivo — filtre no consumidor com
+  `delete row["#text"]` se atrapalhar.
+- **`IsValidDataServer` em probe inexistente vira SOAP Fault, não `false`.**
+  Quando você passa um nome desconhecido, o RM responde HTTP 200 + Fault
+  `Classe não encontrada: <Nome>`. O `diagnose authenticate` se aproveita
+  disso: receber um SOAP Fault depois de autenticar é evidência de que a
+  credencial passou e só o probe sintético é que falhou.
+- **SOAP Fault de ConsultaSQL inclui a chave completa.** Ao errar `codSentenca`
+  o RM retorna `A consulta SQL utilizando a chave <coligada>|<sistema>|<codSentenca> não existe ou não pôde ser executada por restrição de filtro por perfil/usuário`.
+  Útil pra debugar permissões.
+- **Cache de WSDL vale a pena.** Em ambientes Cloud TOTVS, baixar e parsear o
+  `?wsdl` do DataServer fica em ~250 ms; com o cache em disco a 2ª chamada
+  cai pra ~45 ms (≈ 5–6× mais rápido). A CLI já liga o cache por padrão.
+- **Authorization é redigido nos logs.** Mesmo com `--log-level debug`, o
+  header `Authorization` sai como `"[REDACTED]"` — é seguro colar log em
+  ticket de bug.
+
 ## Erros
 
 ```ts
@@ -278,6 +316,44 @@ const logger: RmLogger = {
 };
 ```
 
+## Cache de WSDL em disco
+
+O WSDL muda raramente, mas é baixado a cada `createRmClient` (ou a cada
+invocação da CLI). O cache em disco evita esse custo: a primeira chamada
+grava o XML em `~/.cache/rm-webservice-client/<hash>.wsdl`, as próximas
+leem do disco até o TTL expirar.
+
+```ts
+const rm = createRmClient({
+  services: { dataServer: { wsdlUrl: process.env.RM_DATASERVER_WSDL! } },
+  auth: { type: "basic", username: "u", password: "p" },
+  wsdlCache: {
+    enabled: true,
+    ttlMs: 24 * 60 * 60 * 1000, // 24h (default)
+    dir: "/var/cache/rmws",      // opcional — default ~/.cache/rm-webservice-client
+  },
+});
+```
+
+Defaults: TTL 24h, diretório `$XDG_CACHE_HOME/rm-webservice-client/`
+(fallback para `~/.cache/rm-webservice-client/`). Hash da URL (SHA-256
+truncado) é o nome do arquivo, então URLs diferentes não colidem.
+
+Erros de IO no cache (sem permissão de escrita, disco cheio, etc.) **não
+quebram** o cliente — eles são logados como `wsdl.cache.write-error` /
+`wsdl.cache.read-error` e a operação segue como se o cache estivesse
+desligado.
+
+Na CLI, o cache vem **ligado por padrão**:
+
+```bash
+rmws inspect dataserver --wsdl "$RM_DATASERVER_WSDL"   # já usa cache
+rmws inspect dataserver --no-wsdl-cache                 # desliga
+RM_WSDL_CACHE=0 rmws inspect dataserver                 # desliga via env
+rmws inspect dataserver --wsdl-cache-ttl 3600000        # TTL 1h
+rmws inspect dataserver --wsdl-cache-dir /tmp/c         # dir custom
+```
+
 ## Override manual (sem WSDL)
 
 Em ambientes onde o `?wsdl` está bloqueado mas o endpoint funciona:
@@ -336,6 +412,9 @@ Flags globais:
 | `--quiet`                | Suprime mensagens em stderr                                    |
 | `--log-level <level>`    | Liga logs estruturados em stderr (`debug \| info \| warn \| error`) |
 | `--log-body`             | Inclui body SOAP redigido nos logs (use com `--log-level debug`) |
+| `--no-wsdl-cache`        | Desliga o cache em disco do WSDL (default: ligado na CLI)      |
+| `--wsdl-cache-ttl <ms>`  | TTL do cache de WSDL (default: 24h)                            |
+| `--wsdl-cache-dir <dir>` | Diretório do cache de WSDL (default: `~/.cache/rm-webservice-client`) |
 
 Flags do `diagnose`:
 
@@ -372,6 +451,9 @@ RM_PASSWORD=...
 RM_BEARER_TOKEN=...
 RM_TIMEOUT_MS=30000
 RM_LOG_LEVEL=debug
+RM_WSDL_CACHE=0                  # opcional, desliga cache de WSDL na CLI
+RM_WSDL_CACHE_TTL_MS=3600000     # opcional, TTL custom (ms)
+RM_WSDL_CACHE_DIR=/tmp/rmws      # opcional, diretório custom
 ```
 
 > **WSDL em WCF (TOTVS RM Cloud)**: o WSDL é servido no endpoint MEX

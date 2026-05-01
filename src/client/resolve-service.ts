@@ -4,6 +4,7 @@ import { resolveWsdlService } from "../wsdl/resolve-wsdl-service.js";
 
 import type { RmLogger } from "../logging/types.js";
 import type { ResolvedSoapService } from "../wsdl/wsdl-types.js";
+import type { WsdlCacheOptions } from "../wsdl/wsdl-cache.js";
 import type { RmSoapServiceOptions } from "./types.js";
 
 export interface ServiceResolverContext {
@@ -11,6 +12,7 @@ export interface ServiceResolverContext {
   expectedPortName: string;
   defaultNamespace: string;
   logger?: RmLogger;
+  cache?: WsdlCacheOptions;
 }
 
 export function createServiceResolver(
@@ -64,6 +66,7 @@ async function resolveOnce(
     ...(options.wsdlUrl !== undefined ? { wsdlUrl: options.wsdlUrl } : {}),
     ...(options.wsdlXml !== undefined ? { wsdlXml: options.wsdlXml } : {}),
     ...(context.logger ? { logger: context.logger } : {}),
+    ...(context.cache ? { cache: context.cache } : {}),
   });
 
   return resolveWsdlService({

@@ -49,4 +49,16 @@ describe("createAuthHeader", () => {
       createAuthHeader({ type: "bearer", token: "" }),
     ).rejects.toBeInstanceOf(RmConfigError);
   });
+
+  it("Bearer com getToken retornando vazio lança RmConfigError", async () => {
+    await expect(
+      createAuthHeader({ type: "bearer", getToken: async () => "" }),
+    ).rejects.toBeInstanceOf(RmConfigError);
+  });
+
+  it("Tipo de auth não suportado lança RmConfigError", async () => {
+    await expect(
+      createAuthHeader({ type: "oauth" } as unknown as Parameters<typeof createAuthHeader>[0]),
+    ).rejects.toThrow(/não suportado/);
+  });
 });

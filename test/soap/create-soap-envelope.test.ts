@@ -53,6 +53,16 @@ describe("createSoapEnvelope", () => {
     expect(xml).toContain("<tot:Filtro/>");
   });
 
+  it("renderiza booleanos como true/false", () => {
+    const xml = createSoapEnvelope({
+      namespace: "http://x/",
+      operationName: "Op",
+      body: { Ativo: true, Inativo: false },
+    });
+    expect(xml).toContain("<tot:Ativo>true</tot:Ativo>");
+    expect(xml).toContain("<tot:Inativo>false</tot:Inativo>");
+  });
+
   it("preserva ordem das chaves do body", () => {
     const xml = createSoapEnvelope({
       namespace: "http://www.totvs.com/",

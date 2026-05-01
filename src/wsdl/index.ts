@@ -3,3 +3,5 @@ export type { LoadWsdlOptions } from "./load-wsdl.js";
 export { resolveWsdlService } from "./resolve-wsdl-service.js";
 export type { ResolveWsdlServiceOptions } from "./resolve-wsdl-service.js";
 export type { ResolvedSoapOperation, ResolvedSoapService } from "./wsdl-types.js";
+export { defaultCacheDir } from "./wsdl-cache.js";
+export type { WsdlCacheOptions } from "./wsdl-cache.js";

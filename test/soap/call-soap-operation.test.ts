@@ -120,6 +120,44 @@ describe("callSoapOperation", () => {
     ).rejects.toBeInstanceOf(RmTimeoutError);
   });
 
+  it("SOAP Fault sem faultstring usa fallback '(sem mensagem)'", async () => {
+    const noStringFault = `<?xml version="1.0"?>
+      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+        <s:Body><s:Fault><s:Code><s:Value>Receiver</s:Value></s:Code></s:Fault></s:Body>
+      </s:Envelope>`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(noStringFault, { status: 500 })),
+    );
+    try {
+      await callSoapOperation(baseOptions);
+      expect.fail("deveria ter lançado");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RmSoapFaultError);
+      expect((err as Error).message).toContain("(sem mensagem)");
+    }
+  });
+
+  it("logBody=true inclui body no log de request e response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<resposta/>", { status: 200 })),
+    );
+    const events: Array<{ event: string; data: Record<string, unknown> | undefined }> = [];
+    const logger = {
+      debug: (event: string, data?: Record<string, unknown>) => events.push({ event, data }),
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    };
+    await callSoapOperation({ ...baseOptions, logger, logBody: true });
+
+    const requestLog = events.find((e) => e.event === "soap.request");
+    const responseLog = events.find((e) => e.event === "soap.response");
+    expect(requestLog?.data?.body).toBeTypeOf("string");
+    expect(responseLog?.data?.body).toBe("<resposta/>");
+  });
+
   it("propaga erro de rede genérico", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNRESET")));
     await expect(callSoapOperation(baseOptions)).rejects.toThrow("ECONNRESET");

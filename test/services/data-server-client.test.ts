@@ -131,6 +131,21 @@ describe("DataServerClient.readView", () => {
     expect(url).toBe("https://rm.example.com:1251/wsDataServer/IwsDataServer");
   });
 
+  it("parseMode dataset retorna XML interno (sem parsing)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-readview.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.readView({
+      dataServerName: "X",
+      parseMode: "dataset",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("<NewDataSet>");
+    expect(result as unknown as string).not.toContain("<ReadViewResult>");
+  });
+
   it("aplica defaults.context quando opts.context é omitido", async () => {
     const fetchMock = vi
       .fn()
@@ -173,6 +188,25 @@ describe("DataServerClient.readRecord", () => {
     expect(usuario?.CODUSUARIO).toBe("mestre");
   });
 
+  it("parseMode raw retorna XML cru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          fixture("dataserver-readview-single.xml").replace(/ReadView/g, "ReadRecord"),
+        ),
+      ),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.readRecord({
+      dataServerName: "X",
+      primaryKey: "abc",
+      parseMode: "raw",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("ReadRecordResult");
+  });
+
   it("retorna null quando NewDataSet vazio", async () => {
     vi.stubGlobal(
       "fetch",
@@ -191,6 +225,25 @@ describe("DataServerClient.readRecord", () => {
       primaryKey: "naoexiste",
     });
     expect(usuario).toBeNull();
+  });
+
+  it("parseMode dataset retorna XML interno", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          fixture("dataserver-readview-single.xml").replace(/ReadView/g, "ReadRecord"),
+        ),
+      ),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.dataServer.readRecord({
+      dataServerName: "X",
+      primaryKey: "abc",
+      parseMode: "dataset",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("<NewDataSet>");
   });
 
   it("serializa chave composta com ;", async () => {
@@ -259,6 +312,40 @@ describe("DataServerClient.isValidDataServer", () => {
     expect(
       await rm.dataServer.isValidDataServer({ dataServerName: "X" }),
     ).toBe(false);
+  });
+
+  it("lança RmParseError quando IsValidDataServerResult é diferente de true/false", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          fixture("dataserver-isvalid-true.xml").replace(">true<", ">talvez<"),
+        ),
+      ),
+    );
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.isValidDataServer({ dataServerName: "X" }),
+    ).rejects.toMatchObject({ code: "RM_PARSE_ERROR" });
+  });
+});
+
+describe("DataServerClient — operação ausente no service", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("lança RmConfigError quando a operação não está no port", async () => {
+    const rm = createRmClient({
+      services: {
+        dataServer: {
+          endpointUrl: "https://rm.example.com/wsDataServer/IwsDataServer",
+          soapActions: {},
+        },
+      },
+      auth: { type: "basic", username: "u", password: "p" },
+    });
+    await expect(
+      rm.dataServer.readView({ dataServerName: "X" }),
+    ).rejects.toMatchObject({ code: "RM_CONFIG_ERROR" });
   });
 });
 

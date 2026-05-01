@@ -56,6 +56,27 @@ describe("parseRmDataset", () => {
     expect(typeof records[0]?.CODFILIAL).toBe("string");
   });
 
+  it("retorna [] quando XML não tem NewDataSet nem diffgram", () => {
+    expect(
+      parseRmDataset({
+        innerXml: "<other><foo>bar</foo></other>",
+        operationName: "ReadView",
+      }),
+    ).toEqual([]);
+  });
+
+  it("retorna [] quando diffgram existe mas não tem NewDataSet dentro", () => {
+    const xml = `<diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">
+      <foo>bar</foo>
+    </diffgr:diffgram>`;
+    expect(parseRmDataset({ innerXml: xml, operationName: "ReadView" })).toEqual([]);
+  });
+
+  it("retorna [] quando NewDataSet só contém schema (sem registros)", () => {
+    const xml = `<NewDataSet><xs:schema id="X"/></NewDataSet>`;
+    expect(parseRmDataset({ innerXml: xml, operationName: "ReadView" })).toEqual([]);
+  });
+
   it("aceita NewDataSet dentro de diffgr:diffgram", () => {
     const records = parseRmDataset({
       innerXml: `<diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1">

@@ -150,4 +150,166 @@ describe("resolveWsdlService — erros", () => {
       expect(msg).toContain("RM_IwsBase");
     }
   });
+
+  it("lança RmConfigError quando WSDL não tem <wsdl:definitions>", () => {
+    expect(() =>
+      resolveWsdlService({
+        wsdlXml: '<root xmlns="http://x"/>',
+        expectedPortName: "X",
+      }),
+    ).toThrow(/wsdl:definitions/);
+  });
+
+  it("lança RmConfigError quando definitions não tem targetNamespace", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"/>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "X" }),
+    ).toThrow(/targetNamespace/);
+  });
+
+  it("lança RmConfigError quando WSDL não tem <wsdl:service>", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" targetNamespace="http://t/"/>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "X" }),
+    ).toThrow(/wsdl:service/);
+  });
+
+  it("lança RmConfigError quando port não tem <soap:address>", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="tns:B"/>
+        </wsdl:service>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/soap:address/);
+  });
+
+  it("lança RmConfigError quando port não tem atributo binding", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/binding/);
+  });
+
+  it("lança RmConfigError quando binding referenciado não existe", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="tns:Bsumido">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/Binding "Bsumido"/);
+  });
+
+  it("lança RmConfigError quando transport do binding não é SOAP HTTP", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="tns:B">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+        <wsdl:binding name="B" type="tns:T">
+          <soap:binding transport="http://schemas.xmlsoap.org/soap/jms"/>
+        </wsdl:binding>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/transporte SOAP HTTP/);
+  });
+
+  it("lança RmConfigError quando operação não tem soapAction", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="tns:B">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+        <wsdl:binding name="B" type="tns:T">
+          <soap:binding transport="http://schemas.xmlsoap.org/soap/http"/>
+          <wsdl:operation name="OpSemAction"/>
+        </wsdl:binding>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/soapAction/);
+  });
+
+  it("lança RmConfigError quando binding não tem operações", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="tns:B">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+        <wsdl:binding name="B" type="tns:T">
+          <soap:binding transport="http://schemas.xmlsoap.org/soap/http"/>
+        </wsdl:binding>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/não possui operações/);
+  });
+
+  it("mensagem de erro mostra '(nenhum)' quando service não tem ports", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" targetNamespace="http://t/">
+        <wsdl:service name="S"/>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "X" }),
+    ).toThrow(/\(nenhum\)/);
+  });
+
+  it("mensagem mostra 'ausente' quando binding não tem soap:binding", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="tns:B">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+        <wsdl:binding name="B" type="tns:T"/>
+      </wsdl:definitions>`;
+    expect(() =>
+      resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" }),
+    ).toThrow(/ausente/);
+  });
+
+  it("aceita binding ref sem prefixo de namespace (stripNamespacePrefix fallback)", () => {
+    const xml = `<?xml version="1.0"?>
+      <wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="http://t/">
+        <wsdl:service name="S">
+          <wsdl:port name="P" binding="B">
+            <soap:address location="http://x"/>
+          </wsdl:port>
+        </wsdl:service>
+        <wsdl:binding name="B" type="T">
+          <soap:binding transport="http://schemas.xmlsoap.org/soap/http"/>
+          <wsdl:operation name="Op">
+            <soap:operation soapAction="http://x/Op"/>
+          </wsdl:operation>
+        </wsdl:binding>
+      </wsdl:definitions>`;
+    const svc = resolveWsdlService({ wsdlXml: xml, expectedPortName: "P" });
+    expect(svc.endpointUrl).toBe("http://x");
+    expect(svc.operations.Op?.soapAction).toBe("http://x/Op");
+  });
 });

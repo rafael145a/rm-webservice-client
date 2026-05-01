@@ -3,6 +3,7 @@ import { createConsoleLogger } from "../logging/console-logger.js";
 
 import type { RmAuth } from "../auth/auth-types.js";
 import type { LogLevel, RmLogger } from "../logging/types.js";
+import type { WsdlCacheOptions } from "../wsdl/wsdl-cache.js";
 
 export interface CliGlobalFlags {
   wsdl?: string;
@@ -14,6 +15,9 @@ export interface CliGlobalFlags {
   quiet?: boolean;
   logLevel?: string;
   logBody?: boolean;
+  wsdlCache?: boolean;
+  wsdlCacheTtl?: number | string;
+  wsdlCacheDir?: string;
 }
 
 export interface ResolvedCliConfig {
@@ -24,6 +28,7 @@ export interface ResolvedCliConfig {
   quiet: boolean;
   logger?: RmLogger;
   logBody?: boolean;
+  wsdlCache?: WsdlCacheOptions;
 }
 
 export type ServiceLabel = "dataServer" | "consultaSql";
@@ -64,6 +69,7 @@ export function resolveCliConfig(
 
   const timeoutMs = parseTimeout(flags.timeout ?? env.RM_TIMEOUT_MS);
   const logger = buildLoggerFromFlags(flags, env);
+  const wsdlCache = resolveWsdlCacheFromFlags(flags, env);
 
   return {
     wsdlUrl,
@@ -73,6 +79,25 @@ export function resolveCliConfig(
     quiet: Boolean(flags.quiet),
     ...(logger ? { logger } : {}),
     ...(flags.logBody ? { logBody: true } : {}),
+    ...(wsdlCache ? { wsdlCache } : {}),
+  };
+}
+
+export function resolveWsdlCacheFromFlags(
+  flags: CliGlobalFlags,
+  env: NodeJS.ProcessEnv = process.env,
+): WsdlCacheOptions | undefined {
+  const explicitDisable =
+    flags.wsdlCache === false || env.RM_WSDL_CACHE === "0" || env.RM_WSDL_CACHE === "false";
+  if (explicitDisable) return undefined;
+
+  const ttlMs = parseTimeout(flags.wsdlCacheTtl ?? env.RM_WSDL_CACHE_TTL_MS);
+  const dir = flags.wsdlCacheDir ?? env.RM_WSDL_CACHE_DIR;
+
+  return {
+    enabled: true,
+    ...(ttlMs !== undefined ? { ttlMs } : {}),
+    ...(dir ? { dir } : {}),
   };
 }
 

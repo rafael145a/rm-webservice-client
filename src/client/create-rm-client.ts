@@ -9,13 +9,14 @@ import type { RmClient, RmClientOptions } from "./types.js";
 const TOTVS_NAMESPACE = "http://www.totvs.com/";
 
 export function createRmClient(options: RmClientOptions): RmClient {
-  const { services, auth, timeoutMs, defaults, logger, logBody } = options;
+  const { services, auth, timeoutMs, defaults, logger, logBody, wsdlCache } = options;
 
   const resolveDataServer = createServiceResolver(services.dataServer, {
     serviceLabel: "dataServer",
     expectedPortName: "RM_IwsDataServer",
     defaultNamespace: TOTVS_NAMESPACE,
     ...(logger ? { logger } : {}),
+    ...(wsdlCache ? { cache: wsdlCache } : {}),
   });
 
   const resolveConsultaSql = createServiceResolver(services.consultaSql, {
@@ -23,6 +24,7 @@ export function createRmClient(options: RmClientOptions): RmClient {
     expectedPortName: "RM_IwsConsultaSQL",
     defaultNamespace: TOTVS_NAMESPACE,
     ...(logger ? { logger } : {}),
+    ...(wsdlCache ? { cache: wsdlCache } : {}),
   });
 
   const dataServer = createDataServerClient({

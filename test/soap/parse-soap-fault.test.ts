@@ -38,4 +38,21 @@ describe("parseSoapFault", () => {
   it("retorna {} quando não encontra Fault", () => {
     expect(parseSoapFault("<not-soap/>")).toEqual({});
   });
+
+  it("extrai Code/Reason no estilo SOAP 1.2 com .Value e .Text aninhados", () => {
+    const xml = `<?xml version="1.0"?>
+      <Envelope><Body><Fault>
+        <Code><Value>Sender</Value></Code>
+        <Reason><Text>algo deu errado</Text></Reason>
+      </Fault></Body></Envelope>`;
+    const fault = parseSoapFault(xml);
+    expect(fault.faultCode).toBe("Sender");
+    expect(fault.faultString).toBe("algo deu errado");
+  });
+
+  it("retorna {} quando Fault existe mas não tem faultcode/Code/faultstring/Reason/Detail", () => {
+    const xml = `<?xml version="1.0"?>
+      <Envelope><Body><Fault><outro>x</outro></Fault></Body></Envelope>`;
+    expect(parseSoapFault(xml)).toEqual({});
+  });
 });

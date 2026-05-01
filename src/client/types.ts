@@ -1,6 +1,7 @@
 import type { RmAuth } from "../auth/auth-types.js";
 import type { RmLogger } from "../logging/types.js";
 import type { RmContext, RmParameters, Separator } from "../rm/types.js";
+import type { WsdlCacheOptions } from "../wsdl/wsdl-cache.js";
 
 export interface RmSoapServiceOptions {
   wsdlUrl?: string;
@@ -24,6 +25,7 @@ export interface RmClientOptions {
   };
   logger?: RmLogger;
   logBody?: boolean;
+  wsdlCache?: WsdlCacheOptions;
 }
 
 export type ParseModeArray = "raw" | "records" | "dataset";

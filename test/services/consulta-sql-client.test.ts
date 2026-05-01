@@ -138,6 +138,41 @@ describe("ConsultaSqlClient.query", () => {
     expect(typeof result).toBe("string");
     expect(result as unknown as string).toContain("RealizarConsultaSQLResult");
   });
+
+  it("repassa logger e logBody para callSoapOperation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => new Response(fixture("consultasql-empty.xml"))),
+    );
+    const events: string[] = [];
+    const logger = {
+      debug: (event: string) => { events.push(event); },
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    };
+    const rm = createRmClient({ ...baseConfig, logger, logBody: true });
+    await rm.consultaSql.query({ codSentenca: "X", codColigada: 1, codSistema: "S" });
+    expect(events).toContain("soap.request");
+    expect(events).toContain("soap.response");
+  });
+
+  it("parseMode dataset retorna XML interno (sem registros parseados)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => new Response(fixture("consultasql-result.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.consultaSql.query({
+      codSentenca: "X",
+      codColigada: 1,
+      codSistema: "S",
+      parseMode: "dataset",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("<NewDataSet>");
+    expect(result as unknown as string).not.toContain("RealizarConsultaSQLResult");
+  });
 });
 
 describe("ConsultaSqlClient.queryWithContext", () => {
@@ -177,6 +212,55 @@ describe("ConsultaSqlClient.queryWithContext", () => {
     );
   });
 
+  it("parseMode dataset retorna XML interno", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            fixture("consultasql-result.xml").replace(
+              /RealizarConsultaSQL/g,
+              "RealizarConsultaSQLContexto",
+            ),
+          ),
+      ),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.consultaSql.queryWithContext({
+      codSentenca: "X",
+      codColigada: 1,
+      codSistema: "S",
+      context: { CODCOLIGADA: 1 },
+      parseMode: "dataset",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("<NewDataSet>");
+  });
+
+  it("parseMode raw retorna envelope SOAP cru", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        () =>
+          new Response(
+            fixture("consultasql-result.xml").replace(
+              /RealizarConsultaSQL/g,
+              "RealizarConsultaSQLContexto",
+            ),
+          ),
+      ),
+    );
+    const rm = createRmClient(baseConfig);
+    const result = await rm.consultaSql.queryWithContext({
+      codSentenca: "X",
+      codColigada: 1,
+      codSistema: "S",
+      parseMode: "raw",
+    });
+    expect(typeof result).toBe("string");
+    expect(result as unknown as string).toContain("RealizarConsultaSQLContextoResult");
+  });
+
   it("aplica defaults.context quando context é omitido", async () => {
     const fetchMock = vi
       .fn()
@@ -203,5 +287,24 @@ describe("ConsultaSqlClient.queryWithContext", () => {
 
     const body = (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string;
     expect(body).toContain("<tot:contexto>CODCOLIGADA=1;CODSISTEMA=S</tot:contexto>");
+  });
+});
+
+describe("ConsultaSqlClient — operação ausente no service", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("lança RmConfigError quando RealizarConsultaSQL não está no port", async () => {
+    const rm = createRmClient({
+      services: {
+        consultaSql: {
+          endpointUrl: "https://rm.example.com/wsConsultaSQL/IwsConsultaSQL",
+          soapActions: {},
+        },
+      },
+      auth: { type: "basic", username: "u", password: "p" },
+    });
+    await expect(
+      rm.consultaSql.query({ codSentenca: "X", codColigada: 1, codSistema: "S" }),
+    ).rejects.toMatchObject({ code: "RM_CONFIG_ERROR" });
   });
 });
