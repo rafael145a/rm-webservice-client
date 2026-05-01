@@ -3,6 +3,7 @@ import { assertRmResultOk } from "../rm/detect-result-error.js";
 import { extractResultXml } from "../rm/extract-result-xml.js";
 import { parseRmDataset } from "../rm/parse-rm-dataset.js";
 import { serializeContext } from "../rm/serialize-context.js";
+import { parseXsdSchema } from "../schema/parse-xsd.js";
 import { callSoapOperation } from "../soap/call-soap-operation.js";
 
 import type { RmAuth } from "../auth/auth-types.js";
@@ -128,6 +129,11 @@ export function createDataServerClient(
         resultElementName: "GetSchemaResult",
         operationName: "GetSchema",
       });
+    },
+
+    async getSchemaParsed(opts: GetSchemaOptions) {
+      const xsd = await this.getSchema(opts);
+      return parseXsdSchema(xsd);
     },
 
     async saveRecord(opts: SaveRecordOptions): Promise<string> {

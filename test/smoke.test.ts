@@ -12,7 +12,7 @@ import { NOOP_LOGGER } from "../src/logging/no-op-logger.js";
 
 describe("smoke", () => {
   it("exports VERSION", () => {
-    expect(VERSION).toBe("0.4.0");
+    expect(VERSION).toBe("0.5.0");
   });
 
   it("expõe símbolos via barrels", () => {

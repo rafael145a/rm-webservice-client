@@ -285,6 +285,47 @@ describe("DataServerClient.getSchema", () => {
   });
 });
 
+describe("DataServerClient.getSchemaParsed", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("retorna RmDataServerSchema parseado a partir do XSD do RM", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(new Response(fixture("dataserver-getschema-full.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    const schema = await rm.dataServer.getSchemaParsed({
+      dataServerName: "GlbUsuarioData",
+    });
+    expect(schema.datasetName).toBe("GlbUsuarioData");
+    expect(schema.rows).toHaveLength(1);
+    expect(schema.rows[0]?.name).toBe("GUSUARIO");
+    expect(schema.rows[0]?.fields).toHaveLength(2);
+
+    const cod = schema.rows[0]?.fields.find((f) => f.name === "CODUSUARIO");
+    expect(cod?.tsType).toBe("string");
+    expect(cod?.optional).toBe(false);
+
+    const status = schema.rows[0]?.fields.find((f) => f.name === "STATUS");
+    expect(status?.tsType).toBe("number");
+    expect(status?.optional).toBe(true);
+    expect(status?.default).toBe("1");
+  });
+
+  it("propaga RmParseError se o XSD vier inválido", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(fixture("dataserver-getschema.xml"))),
+    );
+    const rm = createRmClient(baseConfig);
+    await expect(
+      rm.dataServer.getSchemaParsed({ dataServerName: "X" }),
+    ).rejects.toMatchObject({ code: "RM_PARSE_ERROR" });
+  });
+});
+
 describe("DataServerClient.isValidDataServer", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 

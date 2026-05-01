@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <GetSchemaResponse xmlns="http://www.totvs.com/">
+      <GetSchemaResult><![CDATA[<GlbUsuarioData>
+<xs:schema id="GlbUsuarioData" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+  <xs:element name="GlbUsuarioData" msdata:IsDataSet="true">
+    <xs:complexType>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="GUSUARIO">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="CODUSUARIO" msdata:Caption="Usuário" type="xs:string"/>
+              <xs:element name="STATUS" msdata:Caption="Ativo" type="xs:short" default="1" minOccurs="0"/>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
+</GlbUsuarioData>]]></GetSchemaResult>
+    </GetSchemaResponse>
+  </s:Body>
+</s:Envelope>

@@ -12,6 +12,10 @@ import {
   type DeleteRecordFlags,
 } from "./commands/delete-record.js";
 import { diagnoseCommand, type DiagnoseFlags } from "./commands/diagnose.js";
+import {
+  generateTypesCommand,
+  type GenerateTypesFlags,
+} from "./commands/generate-types.js";
 import { inspectCommand } from "./commands/inspect.js";
 import {
   readLookupViewCommand,
@@ -121,6 +125,18 @@ cli
       process.stdout.write(out + "\n");
     },
   );
+
+cli
+  .command(
+    "generate-types <dataServerName>",
+    "Gera interfaces TypeScript a partir do GetSchema do DataServer",
+  )
+  .option("--out <path>", "Caminho de destino do arquivo .ts (default: stdout)")
+  .option("--context <ctx>", "Contexto (string ou K=V;K=V)")
+  .action(async (dataServerName: string, flags: GenerateTypesFlags) => {
+    const out = await generateTypesCommand(dataServerName, flags);
+    process.stdout.write(out + "\n");
+  });
 
 cli
   .command(
