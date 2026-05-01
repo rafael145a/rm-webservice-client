@@ -3,8 +3,12 @@ import { assertRmResultOk } from "../rm/detect-result-error.js";
 import { extractResultXml } from "../rm/extract-result-xml.js";
 import { parseRmDataset } from "../rm/parse-rm-dataset.js";
 import { serializeContext } from "../rm/serialize-context.js";
+import { buildRecord as buildRecordPure } from "../schema/build-record.js";
 import { parseXsdSchema } from "../schema/parse-xsd.js";
 import { callSoapOperation } from "../soap/call-soap-operation.js";
+
+import type { BuildRecordOptions, RmRecordsInput } from "../schema/build-types.js";
+import type { RmDataServerSchema } from "../schema/types.js";
 
 import type { RmAuth } from "../auth/auth-types.js";
 import type { RmLogger } from "../logging/types.js";
@@ -12,6 +16,7 @@ import type { RmContext, Separator } from "../rm/types.js";
 import type { ResolvedSoapService } from "../wsdl/wsdl-types.js";
 import type {
   DataServerClient,
+  DataServerNameInput,
   DeleteRecordByKeyOptions,
   DeleteRecordOptions,
   GetSchemaOptions,
@@ -73,6 +78,28 @@ export function createDataServerClient(
   function serializePrimaryKey(pk: ReadRecordOptions["primaryKey"]): string {
     if (Array.isArray(pk)) return pk.map((v) => String(v)).join(";");
     return String(pk);
+  }
+
+  // Cache de schema parseado por DataServerName (vida do client).
+  const schemaCache = new Map<string, RmDataServerSchema>();
+  async function loadSchema(
+    dataServerName: DataServerNameInput,
+    context: RmContext | undefined,
+  ): Promise<RmDataServerSchema> {
+    const cached = schemaCache.get(String(dataServerName));
+    if (cached) return cached;
+    const xml = await call("GetSchema", {
+      DataServerName: dataServerName,
+      Contexto: effectiveContext(context),
+    });
+    const inner = extractResultXml({
+      soapXml: xml,
+      resultElementName: "GetSchemaResult",
+      operationName: "GetSchema",
+    });
+    const parsed = parseXsdSchema(inner);
+    schemaCache.set(String(dataServerName), parsed);
+    return parsed;
   }
 
   return {
@@ -137,9 +164,26 @@ export function createDataServerClient(
     },
 
     async saveRecord(opts: SaveRecordOptions): Promise<string> {
+      if (opts.xml !== undefined && opts.fields !== undefined) {
+        throw new RmConfigError(
+          "saveRecord aceita 'xml' OU 'fields', não os dois.",
+        );
+      }
+      let payloadXml: string;
+      if (opts.fields !== undefined) {
+        const schema = await loadSchema(opts.dataServerName, opts.context);
+        payloadXml = buildRecordPure(schema, opts.fields, opts.build ?? {});
+      } else if (opts.xml !== undefined) {
+        payloadXml = opts.xml;
+      } else {
+        throw new RmConfigError(
+          "saveRecord requer 'xml' ou 'fields'.",
+        );
+      }
+
       const xml = await call("SaveRecord", {
         DataServerName: opts.dataServerName,
-        XML: opts.xml,
+        XML: payloadXml,
         Contexto: effectiveContext(opts.context),
       });
 
@@ -155,6 +199,16 @@ export function createDataServerClient(
         return assertRmResultOk("SaveRecord", result);
       }
       return result;
+    },
+
+    async buildRecord(
+      dataServerName: DataServerNameInput,
+      fields: RmRecordsInput,
+      options: (BuildRecordOptions & { context?: RmContext }) = {},
+    ): Promise<string> {
+      const { context, ...buildOpts } = options;
+      const schema = await loadSchema(dataServerName, context);
+      return buildRecordPure(schema, fields, buildOpts);
     },
 
     async deleteRecord(opts: DeleteRecordOptions): Promise<string> {
