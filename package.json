@@ -1,8 +1,8 @@
 {
   "name": "rm-webservice-client",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Cliente TypeScript não oficial para consumir wsDataServer e wsConsultaSQL do TOTVS RM via SOAP.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rafael145a/rm-webservice-client.git"
