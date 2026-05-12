@@ -1062,6 +1062,15 @@ Histórico completo em [`CHANGELOG.md`](./CHANGELOG.md).
 - Builder com tipos cruzados com `generate-types` — TS infere os
   fields aceitos pelo nome do DataServer — `1.x.x`
 
-## Licença
+## Licenciamento
 
-MIT
+Este projeto está licenciado sob a **GNU AGPLv3**. Veja o arquivo
+[`LICENSE`](./LICENSE) para o texto integral.
+
+> ⚠️ **Atenção:** se você deseja incorporar este código em um produto de
+> código fechado (proprietário) ou não deseja cumprir as obrigações da
+> AGPL (como compartilhar suas modificações), você deve adquirir uma
+> **Licença Comercial**.
+>
+> 📧 Entre em contato através do e-mail **rafaelgmarreca@gmail.com**
+> para negociar uma licença comercial.

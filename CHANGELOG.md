@@ -6,6 +6,28 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/) e a partir
 da `1.0.0` o projeto adota [SemVer](https://semver.org/lang/pt-BR/) — quebras
 de API só em major.
 
+## [2.0.0] — 2026-05-12
+
+### Changed — Licença
+
+- **BREAKING:** projeto relicenciado de **MIT** para **GNU AGPLv3** com
+  opção de **licença comercial** alternativa para uso fechado/proprietário
+  (contato: `rafaelgmarreca@gmail.com`).
+- `LICENSE` — texto integral oficial da AGPLv3 + cabeçalho de copyright
+  (`Copyright (C) 2026 Rafael Marreca`) e cláusula de dual-license.
+- `package.json` — campo `license` migrado para `AGPL-3.0-or-later` (SPDX).
+- `README.md` — seção **Licenciamento** reescrita com aviso de AGPL +
+  contato comercial.
+- Bump major porque a mudança de licença é semanticamente breaking para
+  consumidores que dependiam dos termos MIT.
+
+### Compatibilidade de dependências
+
+- Auditoria da árvore completa (`npm ls --all`, 313 pacotes): todas as
+  licenças são compatíveis com AGPLv3 — runtime é puramente MIT
+  (`cac`, `fast-xml-parser`); devDeps são MIT/ISC/BSD/Apache-2.0/Python-2.0
+  (todas GPL/AGPL-compatíveis).
+
 ## [1.0.0] — 2026-05-01
 
 ### Promoted
